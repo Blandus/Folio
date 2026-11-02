@@ -1245,6 +1245,11 @@ button.sz-row:hover { background: var(--surface-3); }
 .storage-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .storage-row b { flex: none; font-variant-numeric: tabular-nums; }
 .storage-box .form-label { margin-top: 6px; }
+/* backups (backup.js) */
+.backup-box { display: flex; flex-direction: column; gap: 6px; }
+.backup-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.restore-list { max-height: 50vh; overflow-y: auto; margin-top: 10px; }
+.restore-list .toggle-row > span { min-width: 0; overflow-wrap: anywhere; }
 
 /* documents kept only in Google Drive */
 .stub-thumb { width: auto; height: 100%; max-width: 100%; object-fit: contain; display: block; }

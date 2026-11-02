@@ -7,6 +7,7 @@ import { pdfToPages, loadImageFile } from './pdf.js';
 import { openDoc } from './editor.js';
 import { suggestNames } from './suggest.js';
 import { sync, signIn, signOut, signedIn } from './sync.js';
+import { backupBox } from './backup.js';
 import { newTextDoc, openTextDoc, renderTextThumb, plainText, printDoc } from './textdoc.js';
 import { newDeck, openDeck, deckArt, deckText, importCardsSheet, exportDeck } from './deck.js';
 import { renderLearnPlan, todayCount } from './learnplan.js';
@@ -1440,6 +1441,8 @@ export async function openSettings() {
     h('div', { class: 'group-box', style: { marginTop: '10px' } },
       toggle('Goodnotes-Kopien in Drive', settings.gnCopies !== false, v => { settings.gnCopies = v; saveSettings(); }),
       h('div', { class: 'hint' }, 'Legt zu jedem Notizbuch eine .goodnotes-Datei im Drive-Ordner der App unter „Goodnotes“ ab (aktualisiert eine Minute nach der letzten Änderung). Öffnen in Goodnotes: Dateien-App → Google Drive.')),
+    h('div', { class: 'form-label' }, 'Backup'),
+    backupBox(),
     h('div', { class: 'form-label' }, 'Speicher'),
     offloadBox(),
     storageBox(),
