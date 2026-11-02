@@ -39,6 +39,11 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   kein Platz ist.
 - **Neue Metadaten-Felder auch in `META` (`js/offload.js`)**: an ausgelagerten Dokumenten überträgt der Sync nur
   diese Felder; fehlt eines, springt die Änderung beim nächsten Sync zurück (v76: Durchgang-Zuordnung).
+- **Backups getrennt vom Sync** (`js/backup.js`, ab v82, Abschnitt „Backups“): eigener Drive-Ordner
+  „Folio-Backups“, den `sync.js` nie anfasst; Datendateien werden nie verändert; die Backup-Liste wird erst nach
+  der Größenprüfung geschrieben; Wiederherstellen nur als Kopie. Der Sync allein verteilt jedes Löschen und jeden
+  Fehler sofort auf alle Geräte; wer das Backup in den Sync-Ordner legt oder beim Wiederherstellen überschreibt, holt
+  genau das zurück.
 - **Kalender-Feeds sind Nutzereingaben:** private ICS-Adressen nie in Code, Beispieldaten oder Logs.
 - **Design-Regeln (ab v72):** Systemschrift; nur die Schriftgrößen 11 · 12 · 13 · 14 · 15 · 16 · 17 · 20 · 22 · 28 · 34 px
   (Kommentar bei `--font` in `style.css`); Dialoge per Wischen schließbar (`swipeToDismiss` in `js/ui.js`), Schließen
@@ -367,6 +372,63 @@ Drive getestet (Erkennen der ausgelagerten Dokumente im Ordner, Fehlermeldung oh
 nicht den Inhalt. Ohne Drive-Sync wird nichts ausgelagert. Getestet mit einer Drive-Attrappe im Browser (Auslagern
 6,8 MB → 24 KB, Umbenennen, Änderung von anderem Gerät, Öffnen, Favorit), nicht mit dem echten Drive.
 
+## Backups (ab v82)
+⚙ → **Backup**. Der Sync hält alle Geräte gleich, auch Fehler: ein gelöschtes, geleertes oder beschädigtes Dokument
+ist Sekunden später überall so. Das Backup bewahrt frühere Stände auf, getrennt vom Sync (`js/backup.js`).
+
+**In Google Drive (täglich, Schalter „Tägliches Backup in Google Drive“, Standard an; Knopf „Jetzt sichern“):**
+- Ordner **„Folio-Backups“** neben „Folio“, Unterordner **„Daten“**: je Fassung eines Datensatzes eine Datei
+  `<id>@<updated>.json`, je PDF `<Datei-id>.pdf`. Einmal geschrieben, nie verändert; eine Fassung liegt nur einmal da,
+  egal wie viele Backups sie enthalten. Jede Datei trägt ihre Soll-Größe (`appProperties.size`).
+- Je Backup eine Liste **„Folio-Backup JJJJ-MM-TT HH-MM.json“** (`appProperties.bk = list`): welche Fassungen und PDFs
+  zu diesem Stand gehören (Name, Art, Ordner, Durchgang/Skript-Verweis, Drive-Datei-ID).
+- Ablauf: erst ein Sync, dann je Datensatz die neueste Fassung (dieses Gerät, außer Hülle oder Drive ist neuer).
+  Liegt diese Fassung schon im Sync-Ordner, kopiert **Drive sie auf dem Server** (`files.copy`, laut offizieller
+  Doku mit `drive.file` erlaubt; Quelle und Kopie sind von Folio angelegt). Das iPad lädt also keine großen
+  Dokumente oder PDFs herunter und wieder hoch, und ausgelagerte Dokumente („nur in Drive“) sind dabei. Nur was Drive
+  in dieser Fassung noch nicht hat (z. B. Sync fehlgeschlagen), lädt Folio vom Gerät hoch.
+- **Prüfung:** Danach listet Folio den Ordner „Daten“ und vergleicht jede Datei dieses Backups mit ihrer Soll-Größe,
+  auch wiederverwendete. Fehlt eine oder ist sie zu klein, kommt sie in den Papierkorb (das nächste Backup schreibt
+  sie neu), und es wird **keine** Liste geschrieben. Die Liste wird zuletzt geschrieben und einmal zurückgelesen.
+  Eine Liste in Drive bedeutet also ein vollständiges Backup.
+- **Automatisch:** nach einem erfolgreichen Sync (`sync.js` ruft `autoBackup()`), höchstens einmal pro Stunde ein
+  Blick in Drive. Ist das neueste Backup (von irgendeinem Gerät) älter als 20 Stunden, sichert Folio.
+- **Aufbewahrung** (`keepSet()`): das neueste Backup je Tag der letzten 7 Tage mit Backup, je Woche für 4 Wochen, je
+  Monat für 12 Monate, und immer das neueste. Mehrere Backups am selben Tag: nur das letzte bleibt. Ältere Listen
+  kommen in den **Drive-Papierkorb** (dort 30 Tage wiederherstellbar). Danach kommen Datendateien in den Papierkorb,
+  die keine behaltene Liste mehr nennt und die älter als einen Tag sind (das schützt das gleichzeitige Backup eines
+  anderen Geräts). Ein Fehler beim Aufräumen lässt das Backup selbst nicht scheitern.
+- Nicht gesichert: Geräte-Einstellungen (localStorage, z. B. Darstellung). Die Werkzeugleiste ist als `prefs`-Datensatz
+  dabei, wird aber nicht zum Wiederherstellen angeboten, ebenso Kalender-Abos (`calfeed`).
+
+**Als Datei sichern (ZIP):** alles auf diesem Gerät plus ausgelagerte Dokumente und PDFs, die nur in Drive liegen
+(einmal geladen, nicht auf dem Gerät behalten). Inhalt: `backup.json` (Liste), `records/<id>.json`, `pdfs/<id>.pdf`.
+ZIP ohne Kompression, aus Blob-Teilen gebaut: nur ein Eintrag gleichzeitig im Speicher (für die CRC). Grenze 4 GB
+(kein ZIP64). iPad: Teilen-Blatt (z. B. „In Dateien sichern“, USB-Stick, anderer Cloud-Speicher); PC: Download. Was
+nicht geladen werden konnte (offline, nicht angemeldet), nennt die Meldung. Die ZIP enthält auch abonnierte
+Kalender-Adressen (ICS), wie der Sync-Ordner auch: Datei wie die Notizen selbst vertraulich behandeln.
+
+**Wiederherstellen …:** Backup wählen (Drive-Liste oder „Aus Backup-Datei (ZIP) …“), dann Einträge oder „Alles“. Ein
+gewählter Ordner bringt seinen Inhalt mit, ein gewähltes Dokument die Ordner auf dem Weg dorthin. Alles kommt als
+**Kopie mit neuen IDs** in einen neuen Ordner „Wiederhergestellt <Datum>“; Vorhandenes wird nie überschrieben, und der
+Sync behandelt die Kopien wie neue Dokumente. Verweise zwischen wiederhergestellten Einträgen (Ordner, Durchgang,
+Skript) zeigen auf die Kopien; ein Durchgang ohne Original wird zum eigenen Dokument. Fehlt eine Original-PDF auf
+dem Gerät, wird sie aus dem Backup eingesetzt (der Sync lädt sie dann hoch). Termine als eine Auswahl
+„Kalender-Termine (n)“.
+
+**Grenzen:** Alles liegt im selben Google-Konto; gegen Kontoverlust hilft nur die ZIP-Datei an einem anderen Ort.
+Zwei Geräte, die in derselben Minute sichern und aufräumen, können sich in seltenen Fällen eine Datendatei in den
+Papierkorb legen; die Prüfung fängt das beim nächsten Backup ab, und die Datei ist 30 Tage im Drive-Papierkorb.
+**Getestet** im Browser gegen eine Drive-Attrappe (nachgebildet: Listen, Anlegen, Multipart/Resumable-Upload,
+`files.copy`, Papierkorb): erstes Backup automatisch nach dem Sync (nur Server-Kopien), Änderung → nur die neue
+Fassung, Sync fehlgeschlagen → Fassung vom Gerät hochgeladen, abgeschnittene Kopie → Backup bricht ohne Liste ab,
+Datei im Papierkorb, nächstes Backup schreibt sie richtig; Aufräumen (42 Listen → 10, verwaiste alte Datei weg,
+frische und noch genannte bleiben); `keepSet` über 400 Tage → 19; Wiederherstellen aus Drive (Ordner mit Inhalt,
+gelöschte PDF zurück, Sync lädt sie hoch); ZIP mit ausgelagertem Dokument (CRC aller Einträge geprüft) und
+Wiederherstellen daraus; Einstellungen 1180×820 dunkel und 820×1180 hell. **Nicht getestet:** echtes Google Drive
+(vor allem `files.copy` und `appProperties` an Kopien), echtes iPad (Teilen-Blatt mit großer ZIP, Speicher bei
+großen Bibliotheken).
+
 ## Synchronisierung und Konflikte
 **Vorher (bis v40):** Jedes Dokument war eine Datei; bei Änderungen auf zwei Geräten gewann die neuere Fassung **als
 Ganzes** — die ältere Änderung ging verloren (z. B. offline auf dem iPad geschrieben, gleichzeitig am PC).
@@ -679,6 +741,7 @@ notizen/
   js/ui.js        Popover, Menüs, Sheets, Dialoge, Toasts
   js/pdf.js       PDF-Import/-Export, Bilder
   js/sync.js      Google-Drive-Sync
+  js/backup.js    Backups: täglich in Google Drive (eigener Ordner), ZIP-Datei, Wiederherstellen als Kopie
   js/merge.js     Drei-Wege-Zusammenführung für den Sync (rein, ohne I/O)
   js/offload.js   Speicher optimieren: große Dokumente nur in Google Drive (Hüllen, Nachladen)
   js/pdfdoc.js    Original-PDFs: speichern, Seiten bei Bedarf rendern, Nachladen aus Drive
@@ -736,6 +799,8 @@ design/folio-reference.png   Design-Referenz
   auch für die neuen Textfeld-Griffe, das Rechteck-Lasso und das Andocken der Detailleiste per Finger/Pencil.
 - Google-Drive-Sync gegen das echte Google Drive mit der neuen Zusammenführung (getestet nur gegen eine Attrappe,
   die die verwendeten Drive-Aufrufe nachbildet) und zwischen zwei echten Geräten.
+- Backups (ab v82) gegen das echte Google Drive, vor allem `files.copy` mit `drive.file`, und die ZIP-Datei über das
+  Teilen-Blatt auf dem iPad.
 - **Google Kalender** insgesamt (Verbinden, Kalenderliste, Laden, Anlegen, Ändern, Löschen): Code folgt der offiziellen
   API-Dokumentation, wurde aber ohne freigeschaltete Kalender-Bereiche nicht gegen ein echtes Konto ausgeführt.
 - ICS-Abo per URL bei einem Server **mit** CORS (der getestete Stundenplan-Feed hat kein CORS → Weg über Google).

@@ -137,11 +137,11 @@ async function findFolders() {
 
 const inFolders = folders => `(${folders.map(id => `'${id}' in parents`).join(' or ')})`;
 
-async function listFiles(q) {
+async function listFiles(q, fields = 'id,name,appProperties') {
   const files = [];
   let pageToken = '';
   do {
-    const r = await (await gapi(`files?q=${enc(q)}&pageSize=1000&fields=nextPageToken,files(id,name,appProperties)${pageToken ? '&pageToken=' + pageToken : ''}`)).json();
+    const r = await (await gapi(`files?q=${enc(q)}&pageSize=1000&fields=nextPageToken,files(${fields})${pageToken ? '&pageToken=' + pageToken : ''}`)).json();
     files.push(...r.files);
     pageToken = r.nextPageToken;
   } while (pageToken);
@@ -190,6 +190,7 @@ async function pushIfUnchanged(rec, folders, expected) {
 // Stored once per file as "<id>.pdf" in the app folder (appProperties folioFile = id), uploaded
 // before the first document that uses it, loaded on other devices when a page is first shown.
 // Files over 5 MB go through Drive's resumable upload (as Drive's upload guide recommends).
+// Returns the Drive file id.
 async function uploadBlob(meta, blob, existingId) {
   const r = await gapi(`https://www.googleapis.com/upload/drive/v3/files${existingId ? '/' + existingId : ''}?uploadType=resumable&fields=id`, {
     method: existingId ? 'PATCH' : 'POST',
@@ -200,6 +201,7 @@ async function uploadBlob(meta, blob, existingId) {
   if (!session) throw new Error('Drive: kein Upload-Ziel erhalten');
   const put = await fetch(session, { method: 'PUT', body: blob });
   if (!put.ok) throw new Error(`Drive-Upload ${put.status}`);
+  return (await put.json().catch(() => ({}))).id || null;
 }
 let appFolders = null; // set at each sync run
 async function driveFileFor(id, folders) {
@@ -228,6 +230,9 @@ async function fetchFile(id) {
 }
 
 const trash = id => gapi(`files/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) });
+
+// Drive access for the backups (backup.js), which keep their own folder apart from the sync.
+export const driveKit = { getToken, gapi, listFiles, findFolders, uploadBlob, fetchRecord, fetchFile, trash, syncError };
 
 // ---------- Goodnotes copies ----------
 // Optional (settings.gnCopies, on by default): one .goodnotes file per notebook in the Drive
@@ -339,6 +344,7 @@ export async function mergeDuplicates(records, now = Date.now(), same = samePage
 export async function sync(interactive) {
   if (drive.busy) return;
   drive.busy = true;
+  let ok = false;
   try {
     await getToken(interactive);
     if (!settings.driveUsed) { settings.driveUsed = true; saveSettings(); }
@@ -460,11 +466,14 @@ export async function sync(interactive) {
     const mergeNote = mergedN ? ` · ${mergedN} zusammengeführt${conflictN ? `, ${conflictN} ${conflictN === 1 ? 'Konflikt-Hinweis' : 'Konflikt-Hinweise'}` : ''}` : '';
     setStatus(`Synchronisiert ${time}${up || down ? ` · ↑${up} ↓${down}` : ''}${mergeNote}${fixed}${offNote}${gnNote}`);
     if (conflictN) emit('conflicts', conflictN);
+    ok = true;
   } catch (err) {
     setStatus('⚠ ' + syncError(err));
   } finally {
     drive.busy = false;
   }
+  // the daily backup (backup.js), once a sync has gone through
+  if (ok) import('./backup.js').then(m => m.autoBackup()).catch(() => {});
 }
 
 let syncT;
