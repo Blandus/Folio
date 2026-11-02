@@ -702,7 +702,7 @@ design/folio-reference.png   Design-Referenz
 - Lasso: frei oder Antippen; Verschieben, Größe ändern, Farbe, Ausschneiden, Kopieren, Einfügen, Duplizieren, Löschen; Filter Handschrift/Bilder/Text
 - Text-Werkzeug: Farbe, Größe, Fett, Kursiv, 5 Schriftarten — für markierten Text oder (ohne Markierung) das ganze Feld; Strg+B/I; Bearbeiten durch Antippen (`js/richtext.js`). Bild einfügen, Laserpointer
 - Rückgängig/Wiederholen (auch für Seiten-Operationen), Zoom (Pinch, Strg+Mausrad, Strg +/−/0)
-- Seiten hinzufügen (`js/addpage.js`): vor dieser / nach dieser / letzte Seite; Schnellvorlagen (aktuelle Vorlage, Leer, Liniert schmal); Mehr Vorlagen (Umschlag- oder Papierseite; Größe: Hoch-/Querformat, Standard, A3–A7, Letter, Tabloid, Angepasst in mm; Papierfarbe; Farbpunkte je Vorlage); Bild; Dokumente scannen (Kamera + Scan-Filter); Foto aufnehmen; Importieren (PDF/Bild)
+- Seiten hinzufügen (`js/addpage.js`): vor dieser / nach dieser / letzte Seite; Schnellvorlagen als seitlich scrollbare Leiste (aktuelle Vorlage, Leer, Liniert schmal sichtbar, die vierte Kachel schaut an, dahinter alle übrigen Vorlagen aus `TEMPLATE_SECTIONS`; jede übernimmt Seitengröße und Papierfarbe der aktuellen Seite); Mehr Vorlagen (Umschlag- oder Papierseite; Größe: Hoch-/Querformat, Standard, A3–A7, Letter, Tabloid, Angepasst in mm; Papierfarbe; Farbpunkte je Vorlage); Bild; Dokumente scannen (Kamera + Scan-Filter); Foto aufnehmen; Importieren (PDF/Bild)
 - Seiten duplizieren, löschen, Vorlage ändern, Lesezeichen
 - Seitenübersicht mit Lesezeichen-Filter, Seitenanzeige „n / N“, Suche im Dokument
 - Export: Dokument/Seite als PDF, Seite als PNG; PDF-Import mit Schreiben auf den Seiten
