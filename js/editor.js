@@ -11,6 +11,7 @@ import { clearSelection, renderSelection, finishText, selectIds, hasSelection, d
 import { addPageMenu as openAddPage } from './addpage.js';
 import { ensureLocal } from './offload.js';
 import { showTextDoc, leaveTextDoc } from './textdoc.js';
+import { htrOn, htrQueue, htrSearchDoc } from './htr.js'; // HTR-Beta
 
 // Page canvases only need to look fine while scrolling; the detail layer provides sharpness.
 // Keeping them smaller saves iPad memory and makes each re-render faster.
@@ -658,14 +659,18 @@ export function toggleSearch(open = searchEl.hidden) {
         const idx = e.text.toLowerCase().indexOf(q);
         if (idx >= 0) hits.push({ i, e, snippet: e.text.slice(Math.max(0, idx - 30), idx + q.length + 40) });
       }));
-      results.replaceChildren(...(hits.length ? hits.map(r => h('button', {
-        class: 'search-hit', onclick: () => { scrollToPage(r.i); selectTool('lasso'); selectIds(ed.doc.pages[r.i], [r.e.id]); },
-      }, h('div', { class: 'hit-page' }, `Seite ${r.i + 1}`), h('div', { class: 'hit-text' }, r.snippet))) : [h('div', { class: 'empty small' }, 'Keine Treffer')]));
+      const show = all => results.replaceChildren(...(all.length ? all.map(r => h('button', {
+        class: 'search-hit', onclick: () => { scrollToPage(r.i); selectTool('lasso'); selectIds(ed.doc.pages[r.i], r.ids || [r.e.id]); },
+      }, h('div', { class: 'hit-page' }, `Seite ${r.i + 1}${r.ids ? ' · Handschrift' : ''}`), h('div', { class: 'hit-text' }, r.snippet))) : [h('div', { class: 'empty small' }, 'Keine Treffer')]));
+      show(hits);
+      // HTR-Beta: handwritten matches (recognised text, see htr.js)
+      if (htrOn()) htrSearchDoc(ed.doc, q).then(hw => { if (input.value.trim().toLowerCase() === q && hw.length) show([...hits, ...hw.map(r => ({ ...r, snippet: r.text }))]); });
     },
   });
+  if (htrOn()) htrQueue(ed.doc.id, true); // HTR-Beta: this document first
   searchEl.replaceChildren(
     h('div', { class: 'panel-head' }, input, h('button', { class: 'iconbtn', title: 'Schließen', onclick: () => toggleSearch(false) }, icon('close', 18))),
-    h('div', { class: 'hint pad' }, 'Durchsucht Textfelder. Handschrift wird nicht erkannt.'),
+    h('div', { class: 'hint pad' }, htrOn() ? 'Durchsucht Textfelder und Handschrift (Beta: erkannter Text, kleine Lesefehler werden toleriert).' : 'Durchsucht Textfelder. Handschrift: Einstellungen → Stift → Handschrift erkennen (Beta).'),
     results);
   input.focus();
 }

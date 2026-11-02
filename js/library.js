@@ -2,7 +2,7 @@ import { $, h, fmtDate, pickFile } from './util.js';
 import { icon, folioMark } from './icons.js';
 import { store, light, settings, saveSettings, bus, newNotebook, newFolder, cloneNotebook, newPage, COVERS, TEMPLATES, TEMPLATE_SECTIONS, PAPERS, FORMATS, PAGE_W, APP_VERSION } from './store.js';
 import { renderCover, renderThumb } from './render.js';
-import { menu, sheet, promptText, confirmBox, toast, segmented, toggle } from './ui.js';
+import { menu, sheet, promptText, confirmBox, toast, segmented, toggle, swipeToDismiss } from './ui.js';
 import { pdfToPages, loadImageFile, exportPdf } from './pdf.js';
 import { openDoc } from './editor.js';
 import { suggestNames } from './suggest.js';
@@ -13,6 +13,7 @@ import { renderLearnPlan, todayCount } from './learnplan.js';
 import { renderCalendar, CAL_KINDS } from './calendar.js';
 import { ensureLocal, offload, runOffload, recordSize, offloadOn, offloadMin, OFFLOAD_SIZES, keepFilesLocal, offloadFolder } from './offload.js';
 import { recording, setRecording } from './pencilrec.js';
+import { htrOn, setHtr, htrDocIds } from './htr.js'; // HTR-Beta
 
 const SECTIONS = {
   docs: { label: 'Alle Notizen', icon: 'notes' },
@@ -74,7 +75,7 @@ compactLibrary.addEventListener('change', () => {
   updateSidebar();
 });
 document.addEventListener('keydown', e => {
-  if (root.hidden || !compactLibrary.matches || !mobileSidebarOpen || document.querySelector('.backdrop, .popover')) return;
+  if (root.hidden || !compactLibrary.matches || !mobileSidebarOpen || document.querySelector('.backdrop:not(.closing), .popover:not(.closing)')) return;
   if (e.key === 'Escape') { e.preventDefault(); setMobileSidebar(false); }
   if (e.key !== 'Tab') return;
   const buttons = [...$('#sidebar').querySelectorAll('button:not(:disabled), a[href], input, [tabindex="0"]')];
@@ -105,6 +106,7 @@ function searchContent(query) {
   searchT = setTimeout(async () => {
     const ids = new Set();
     await store.each(r => { if (!r.deleted && !r.trashed && containsText(r, q)) ids.add(r.id); });
+    for (const id of await htrDocIds(q)) if (byId(id) && !byId(id).trashed) ids.add(id); // HTR-Beta: handwriting
     if (lib.query.trim().toLowerCase() !== q) return; // typed on meanwhile
     lib.hits = { q, ids };
     renderContent();
@@ -358,6 +360,8 @@ async function runThumbJobs() {
 
 // "25. Okt. 2026 um 13:38"
 function sub(r) {
+  // untouched sample notebooks carry a fixed old time (for sync, see seed in main.js): no date for those
+  if (r.id?.startsWith('seed-') && r.updated === Date.UTC(2025, 0, 1)) return 'Beispiel';
   const d = new Date(r.updated);
   return `${d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })} um ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
 }
@@ -860,6 +864,7 @@ function newNotebookSheet() {
   back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
   render();
   document.body.append(back);
+  swipeToDismiss(back.firstElementChild, close);
   title.focus();
 }
 
@@ -1307,6 +1312,9 @@ export async function openSettings() {
     h('div', { class: 'group-box' },
       toggle('Nur mit Stift zeichnen', !settings.fingerDraw, v => { settings.fingerDraw = !v; saveSettings(); }),
       h('div', { class: 'hint' }, 'An: Finger scrollen und zoomen, nur der Apple Pencil zeichnet.'),
+      // HTR-Beta
+      toggle('Handschrift erkennen (Beta)', htrOn(), v => setHtr(v)),
+      h('div', { class: 'hint' }, 'Liest deine Handschrift im Hintergrund, damit die Suche handschriftliche Begriffe findet. Läuft komplett auf diesem Gerät (Modell DE·HTR, einmalig ca. 20 MB), nie beim Schreiben. Der erkannte Text bleibt auf dem Gerät; die Dokumente werden nicht verändert.'),
       toggle('Pencil-Aufzeichnung (Diagnose)', recording(), v => setRecording(v)),
       h('div', { class: 'hint' }, 'Zeichnet die Rohdaten deiner Stiftstriche auf (Positionen, Druck, Neigung, Zeiten), damit die Handschrift am Computer nachgestellt und mit Goodnotes verglichen werden kann. Unten erscheint eine Leiste: Testsatz schreiben, dann „Sichern“ → Datei teilen oder in Dateien sichern. Bleibt nur auf diesem Gerät, bis du sie teilst.')),
     h('div', { class: 'form-label' }, 'Synchronisation'),
