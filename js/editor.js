@@ -13,6 +13,7 @@ import { ensureLocal } from './offload.js';
 import { showTextDoc, leaveTextDoc } from './textdoc.js';
 import { htrOn, htrQueue, htrSearchDoc } from './htr.js'; // HTR-Beta
 import { rootId, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickFrom } from './versions.js';
+import { configurePrefs } from './prefs.js';
 
 // Page canvases only need to look fine while scrolling; the detail layer provides sharpness.
 // Keeping them smaller saves iPad memory and makes each re-render faster.
@@ -65,6 +66,24 @@ function usePalette(key) {
   settings.palette = key; saveSettings();
   PALETTE.splice(0, PALETTE.length, ...PALETTES[key][1]);
 }
+
+// The tool row of another device (prefs.js): T and PALETTE are changed in place, since other
+// modules (inkpad.js, tools.js) hold them.
+configurePrefs({
+  apply(p) {
+    for (const k of Object.keys(DEFAULT_TOOLS)) {
+      if (!p.tools[k]) continue;
+      for (const key of Object.keys(T[k])) delete T[k][key];
+      Object.assign(T[k], DEFAULT_TOOLS[k], p.tools[k]);
+    }
+    T.presets = p.tools.presets || [];
+    settings.customColors = p.customColors || [];
+    if (PALETTES[p.palette]) usePalette(p.palette);
+    saveSettings();
+    if (ed.doc && !view.hidden) renderOptions();
+    document.dispatchEvent(new Event('inkpen')); // flashcard pad (inkpad.js)
+  },
+});
 
 // ---------- Editor state ----------
 export const ed = {
@@ -826,6 +845,7 @@ function buildToolbar() {
       if (await showConflicts(doc) && ed.doc === doc) { delete doc.conflicts; changed(); updateChrome(); }
     }),
     Object.assign(tb('btnCards', 'cards', 'Karteikarten zu diesem Skript', e => cardsMenu(e.currentTarget)), { hidden: true }),
+    tb('btnRead', 'book', 'Lesemodus (nur ansehen)', () => setReading(true)),
     tb('btnAdd', 'addPage', 'Seite hinzufügen', e => addPageMenu(e.currentTarget)),
     tb('btnShare', 'share', 'Exportieren', e => exportMenu(e.currentTarget)),
     tb('btnMore', 'moreCircle', 'Mehr', e => menu(e.currentTarget, [
@@ -839,6 +859,25 @@ function buildToolbar() {
       { label: 'Nur mit Stift zeichnen', checked: !settings.fingerDraw, action: () => { settings.fingerDraw = !settings.fingerDraw; saveSettings(); } },
       { label: 'Einstellungen', icon: 'gear', action: openSettings },
     ])));
+}
+
+// ---------- Lesemodus ----------
+// Only viewing: the header, the tool options, undo and the page overview are hidden, and every
+// pointer (pencil too) just scrolls and zooms (tools.js). A small pill top right leads back.
+// Stays on while switching documents, until "Bearbeiten" or Esc.
+ed.reading = false;
+const readPill = h('div', { id: 'readPill', class: 'float-pill read-pill', hidden: true },
+  h('button', { title: 'Bibliothek', 'aria-label': 'Bibliothek', onclick: showLibrary }, icon('chevronLeft', 20)),
+  h('button', { class: 'read-edit', title: 'Bearbeiten (Esc)', onclick: () => setReading(false) }, icon('pencil', 16), h('span', {}, 'Bearbeiten')));
+$('#editor .stage').append(readPill);
+export async function setReading(on) {
+  if (on === ed.reading) return;
+  if (on) { await finishText(); clearSelection(); closePopover(); }
+  const at = sc.scrollTop / Math.max(1, sc.scrollHeight); // the header comes and goes: keep the place
+  ed.reading = on;
+  view.classList.toggle('reading', on);
+  readPill.hidden = !on;
+  setTimeout(() => { applyZoom(); sc.scrollTop = at * sc.scrollHeight; rerenderVisible(); }, 0);
 }
 
 async function renameDoc() {

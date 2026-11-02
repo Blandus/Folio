@@ -5,7 +5,7 @@ import { settings } from './store.js';
 import { bbox, unionBox, transformEl, drawStroke, pageH, pageW, pageX0, pageY0, renderPage, renderElements, LINE_H, pieceWidth, toRadius, fontFamily } from './render.js';
 import {
   ed, T, sc, commit, renderEl, repaintArea, elForPage, setZoom, undo, redo, selectTool, renderOptions,
-  scrollToPage, currentPage, toggleSearch, PALETTE, saveTools,
+  scrollToPage, currentPage, toggleSearch, PALETTE, saveTools, setReading,
 } from './editor.js';
 import { toast, popover, closePopover, menu } from './ui.js';
 import { samplePiece, addSamplesToPath, strokeSamples, tipRadius } from './ink.js';
@@ -42,7 +42,7 @@ export function initTools() {
   // right click on a page: "Einsetzen" at that point (a finger long press does the same, see watchPress)
   sc.addEventListener('contextmenu', e => {
     const el = e.target.closest('.page');
-    if (!el || e.target.closest('.selbox, .text-editor') || e.pointerType === 'touch') return;
+    if (!el || e.target.closest('.selbox, .text-editor') || e.pointerType === 'touch' || ed.reading) return;
     e.preventDefault();
     pasteMenu(el, e.clientX, e.clientY);
   });
@@ -233,6 +233,15 @@ function recognize(points) {
 // ---------- Pointer routing ----------
 function onDown(e) {
   stopMomentum();
+  // Lesemodus (editor.js): pencil, finger and mouse only scroll and zoom; nothing is edited
+  if (ed.reading) {
+    if (e.button) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    tap = null;
+    try { sc.setPointerCapture(e.pointerId); } catch {}
+    startGesture();
+    return;
+  }
   if (e.target.closest('.sel-menu, .text-editor, .lasso-hint')) return;
   removeLassoHint();
   // Shape corner handles can be dragged with pen, finger or mouse.
@@ -351,7 +360,7 @@ function onMove(e) {
     return;
   }
   if (press?.id === e.pointerId && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancelPress();
-  if (e.pointerType === 'touch' && touches.has(e.pointerId) && gesture) {
+  if ((e.pointerType === 'touch' || ed.reading) && touches.has(e.pointerId) && gesture) {
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (palmLikely()) { startGesture(); return; } // resting hand: don't move the page under the pen
     const g = gestureState();
@@ -1508,6 +1517,11 @@ function onKey(e) {
   if (document.querySelector('.backdrop')) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   const handled = () => e.preventDefault();
+  // Lesemodus: only searching, zooming and turning pages; Esc ends it
+  if (ed.reading) {
+    if (k === 'escape') { handled(); return setReading(false); }
+    if (mod ? !['f', '=', '+', '-', '0'].includes(k) : !['pagedown', 'pageup', 'arrowright', 'arrowleft'].includes(k)) return;
+  }
   if (mod) {
     if (k === 'z') { handled(); e.shiftKey ? redo() : undo(); }
     else if (k === 'y') { handled(); redo(); }

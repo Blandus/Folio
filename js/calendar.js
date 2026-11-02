@@ -1,8 +1,11 @@
-// Week calendar ("Kalender" in the library sidebar).
+// Calendar ("Kalender" in the library sidebar): week view and month view (settings.calView).
 //
 // Sources, each shown with its colour and named in the event details:
 // - Folio: own events, stored as records { kind: 'event' } and synced with Google Drive like
 //   documents. Times are wall-clock times in the zone of the device that created them (tz).
+//   { date, start, endDate?, end, allDay? }: endDate (ab v80) makes an event span several days;
+//   without it the event ends on its start day (or the next one when end ≤ start, as before).
+//   All-day events have no times; they last from date to endDate inclusive.
 //   Weekly repetition (optionally until a date); single occurrences can be changed or cancelled
 //   (exceptions, keyed by the original date).
 // - ICS: subscriptions (URL, refreshed by hand) and imported .ics files, stored as records
@@ -41,33 +44,57 @@ function isoWeek(t) {
 }
 const fmtDay = d => d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
 const fmtTime = t => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const addDays = (s, n) => { const d = new Date(s + 'T00:00'); d.setDate(d.getDate() + n); return ymd(d); };
+const daysBetween = (a, b) => Math.round((Date.parse(b + 'T00:00') - Date.parse(a + 'T00:00')) / 86400000);
+const monthStartOf = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(1); return d.getTime(); };
+// "Mo., 3. Nov. · 10:00–11:00", "3. – 7. Nov. · ganztägig", "Fr., 3. Nov. 18:00 – So., 5. Nov. 12:00"
+function fmtWhen(o) {
+  const long = t => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (o.allDay) {
+    const last = o.end - o.start > 86400000 ? o.end - 1 : o.start;
+    return ymd(new Date(last)) === ymd(new Date(o.start)) ? `${long(o.start)} · ganztägig` : `${long(o.start)} – ${long(last)} · ganztägig`;
+  }
+  if (ymd(new Date(o.start)) === ymd(new Date(o.end - 1))) return `${long(o.start)} · ${fmtTime(o.start)}–${fmtTime(o.end)}`;
+  return `${long(o.start)} ${fmtTime(o.start)} – ${long(o.end)} ${fmtTime(o.end)}`;
+}
 
-const cal = { ws: weekStartOf(Date.now()), scroll: null, records: [], gcache: new Map(), gerr: '', loadingG: false };
+const cal = {
+  ws: weekStartOf(Date.now()), month: monthStartOf(Date.now()), view: settings.calView === 'month' ? 'month' : 'week',
+  scroll: null, records: [], gcache: new Map(), gerr: '', loadingG: false, mLines: 3,
+};
+// the visible range [from, to) of the current view (the month view shows 6 whole weeks)
+const range = () => (cal.view === 'month' ? [weekStartOf(cal.month), dayAt(weekStartOf(cal.month), 42).getTime()] : [cal.ws, dayAt(cal.ws, 7).getTime()]);
 
 // ---------- Own events ----------
-function ownTimes(r, dateStr, start, end) {
+// x: { date, endDate?, start, end, allDay? } (the event, or one changed occurrence)
+function ownTimes(r, x) {
+  const endDate = x.endDate && x.endDate > x.date ? x.endDate : x.date;
+  if (x.allDay) return [wallToMs(parseYmd(x.date), null), wallToMs(parseYmd(addDays(endDate, 1)), null)];
   const tz = validTz(r.tz || '') ? r.tz : null;
-  const s = wallToMs({ ...parseYmd(dateStr), ...parseHm(start) }, tz);
-  let e = wallToMs({ ...parseYmd(dateStr), ...parseHm(end) }, tz);
-  if (e <= s) e += 86400000; // ends after midnight
+  const s = wallToMs({ ...parseYmd(x.date), ...parseHm(x.start) }, tz);
+  let e = wallToMs({ ...parseYmd(endDate), ...parseHm(x.end) }, tz);
+  if (e <= s) e = endDate === x.date ? e + 86400000 : s + 15 * 60000; // same day: ends after midnight
   return [s, e];
 }
+const spanOf = r => (r.endDate && r.endDate > r.date ? daysBetween(r.date, r.endDate) : 0);
 function expandOwn(r, from, to) {
   const out = [];
+  const span = spanOf(r);
   const add = (dateStr, x, occDate) => {
-    const [s, e] = ownTimes(r, x.date || dateStr, x.start || r.start, x.end || r.end);
-    if (e > from && s < to) out.push({ key: `f|${r.id}|${occDate}`, source: 'folio', rec: r, occDate, title: x.title || r.title || '(ohne Titel)', start: s, end: e, color: FOLIO_COLOR, srcName: 'Folio', editable: true, recurring: !!r.weekly });
+    const v = x.date ? { allDay: !!x.allDay, ...x } : { date: dateStr, endDate: addDays(dateStr, span), start: r.start, end: r.end, allDay: !!r.allDay };
+    const [s, e] = ownTimes(r, v);
+    if (e > from && s < to) out.push({ key: `f|${r.id}|${occDate}`, source: 'folio', rec: r, occDate, title: x.title || r.title || '(ohne Titel)', start: s, end: e, allDay: !!v.allDay, color: FOLIO_COLOR, srcName: 'Folio', editable: true, recurring: !!r.weekly });
   };
   if (!r.weekly) { add(r.date, {}, r.date); return out; }
   const first = parseYmd(r.date);
   const until = r.until ? wallToMs({ ...parseYmd(r.until), h: 23, mi: 59 }, null) : Infinity;
   const base = Date.UTC(first.y, first.m - 1, first.d);
   // start a little before the window instead of at the first occurrence
-  const k0 = Math.max(0, Math.floor((from - wallToMs(first, null)) / (7 * 86400000)) - 1);
+  const k0 = Math.max(0, Math.floor((from - wallToMs(first, null)) / (7 * 86400000)) - 1 - Math.ceil(span / 7));
   for (let k = k0; k < k0 + 60; k++) {
     const d = new Date(base + k * 7 * 86400000);
     const ds = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-    const [s] = ownTimes(r, ds, r.start, r.end);
+    const [s] = ownTimes(r, { date: ds, start: r.start, end: r.end, allDay: r.allDay });
     if (s > until || s >= to + 86400000) break;
     const x = r.exceptions?.[ds];
     if (x?.cancelled) continue;
@@ -128,12 +155,14 @@ async function gListCalendars() {
   saveSettings();
 }
 
-async function gLoadWeek(force) {
+// events of the visible range (a week, or the six weeks of the month view)
+const rangeKey = () => range().join('|');
+async function gLoadRange(force) {
   const cfg = gcfg();
   if (!cfg.on || !gValid()) return;
-  const key = cal.ws;
+  const key = rangeKey();
   if (!force && cal.gcache.has(key)) return;
-  const from = new Date(cal.ws), to = dayAt(cal.ws, 7);
+  const [from, to] = range().map(t => new Date(t));
   const out = [];
   cal.loadingG = true;
   try {
@@ -167,7 +196,7 @@ async function gConnect() {
     await gToken();
     gcfg().on = true; saveSettings();
     await gListCalendars();
-    cal.gcache.clear(); await gLoadWeek(true);
+    cal.gcache.clear(); await gLoadRange(true);
     toast('Google Kalender verbunden');
   } catch (err) { toast('⚠ ' + err.message, 4000); }
   render();
@@ -180,15 +209,15 @@ function gDisconnect() {
 }
 // After the ~1 h token runs out, a tap renews it (Google needs a user gesture).
 async function gReload() {
-  try { await gToken(); cal.gcache.clear(); await gLoadWeek(true); } catch (err) { cal.gerr = err.message; }
+  try { await gToken(); cal.gcache.clear(); await gLoadRange(true); } catch (err) { cal.gerr = err.message; }
   render();
 }
 
-const gTimes = (date, start, end) => {
+// v: { date, endDate, start, end, allDay } from the event sheet. All-day: Google's end date is exclusive.
+const gTimes = v => {
+  if (v.allDay) return { start: { date: v.date }, end: { date: addDays(v.endDate || v.date, 1) } };
   const tz = localTz();
-  let endDate = date;
-  if (end <= start) { const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + 1); endDate = ymd(d); }
-  return { start: { dateTime: `${date}T${start}:00`, timeZone: tz }, end: { dateTime: `${endDate}T${end}:00`, timeZone: tz } };
+  return { start: { dateTime: `${v.date}T${v.start}:00`, timeZone: tz }, end: { dateTime: `${v.endDate}T${v.end}:00`, timeZone: tz } };
 };
 
 // ---------- ICS feeds ----------
@@ -250,9 +279,9 @@ async function importFile() {
 const nextColor = () => FEED_COLORS[cal.records.filter(r => r.kind === 'calfeed' && !r.deleted).length % FEED_COLORS.length];
 const tombstone = r => ({ kind: r.kind, id: r.id, name: r.name, deleted: true, updated: Date.now(), pages: [] });
 
-// ---------- Occurrences of the visible week ----------
-function weekItems() {
-  const from = cal.ws, to = dayAt(cal.ws, 7).getTime();
+// ---------- Occurrences of the visible range ----------
+function rangeItems() {
+  const [from, to] = range();
   const items = [];
   for (const r of cal.records) {
     if (r.deleted) continue;
@@ -261,7 +290,7 @@ function weekItems() {
       items.push({ ...o, key: `i|${r.id}|${o.key}`, source: 'ics', feed: r, color: r.color || FEED_COLORS[0], srcName: (r.url ? 'Abo: ' : 'Import: ') + r.name, editable: false });
     }
   }
-  if (gcfg().on) items.push(...(cal.gcache.get(cal.ws) || []));
+  if (gcfg().on) items.push(...(cal.gcache.get(rangeKey()) || []));
   // the same appointment from two sources (e.g. a feed imported and also shown via Google): once
   const seen = new Set();
   return items.filter(o => { const k = `${o.title.trim().toLowerCase()}|${o.start}|${o.end}`; if (seen.has(k)) return false; seen.add(k); return true; });
@@ -282,34 +311,83 @@ function layout(list) {
   return list;
 }
 
+// ---------- Bars (all-day and multi-day events across the days of a week) ----------
+const overlaps = (o, s, e) => (o.end > s && o.start < e) || (o.end === o.start && o.start >= s && o.start < e);
+// More than one calendar day (an event ending at midnight ends the day before)
+const multiDay = o => ymd(new Date(o.start)) !== ymd(new Date(Math.max(o.start, o.end - 1)));
+// Pieces of consecutive days (0–6) on which inBar(o, i) holds; open ends where the event goes on
+function barSegs(items, ds, de, inBar) {
+  const segs = [];
+  for (const o of items) {
+    let a = -1;
+    for (let i = 0; i <= 7; i++) {
+      const on = i < 7 && overlaps(o, ds[i], de[i]) && inBar(o, i);
+      if (on && a < 0) a = i;
+      if (!on && a >= 0) { segs.push({ o, a, b: i - 1, openL: o.start < ds[a], openR: o.end > de[i - 1] }); a = -1; }
+    }
+  }
+  return segs;
+}
+// Rows ("lanes") for the bars: longer and earlier ones first, each in the first free lane
+function lanes(segs) {
+  segs.sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a) || x.o.start - y.o.start);
+  const ends = [];
+  for (const s of segs) {
+    let l = ends.findIndex(e => e < s.a);
+    if (l < 0) { l = ends.length; ends.push(0); }
+    ends[l] = s.b; s.lane = l;
+  }
+  return ends.length;
+}
+const barBtn = (s, col, row, from = s.a, to = s.b) => h('button', {
+  class: 'cal-bar' + (s.openL && from === s.a ? ' open-l' : '') + (s.openR && to === s.b ? ' open-r' : ''),
+  style: { '--ec': s.o.color, gridColumn: `${col + from} / span ${to - from + 1}`, gridRow: String(row) },
+  title: `${s.o.title} · ${fmtWhen(s.o)} · ${s.o.srcName}`,
+  onclick: e => { e.stopPropagation(); openItem(s.o); },
+}, h('span', {}, s.o.title));
+
 // ---------- View ----------
 let headEl, bodyEl;
 export async function renderCalendar(head, content) {
   if (!content.querySelector('.cal')) cal.scroll = null; // coming from another view: start at the current time again
   headEl = head; bodyEl = content;
   cal.records = (await store.list()).filter(r => CAL_KINDS.has(r.kind));
-  if (gcfg().on && gValid() && !cal.gcache.has(cal.ws) && !cal.loadingG) gLoadWeek().then(render);
+  if (gcfg().on && gValid() && !cal.gcache.has(rangeKey()) && !cal.loadingG) gLoadRange().then(render);
   draw();
 }
 const render = () => { if (headEl?.isConnected) renderCalendar(headEl, bodyEl); };
 
 function go(ws) { cal.ws = ws; render(); }
+function goMonth(t) { cal.month = monthStartOf(t); render(); }
+function setView(v, week = null) { // week: show this week (a day tapped in the month)
+  cal.view = v; settings.calView = v; saveSettings();
+  // keep the place: the week of the shown month's first day (or today), the month of the shown week
+  if (v === 'month') cal.month = monthStartOf(Date.now() >= cal.ws && Date.now() < dayAt(cal.ws, 7).getTime() ? Date.now() : cal.ws);
+  else { const now = Date.now(); cal.ws = week ?? weekStartOf(monthStartOf(now) === cal.month ? now : cal.month); cal.scroll = null; }
+  render();
+}
 
 function draw() {
-  const ws = cal.ws, we = dayAt(ws, 6);
-  const today = ymd(new Date());
-  const nav = h('div', { class: 'cal-nav' },
-    h('button', { class: 'iconbtn plain', title: 'Vorige Woche', 'aria-label': 'Vorige Woche', onclick: () => go(dayAt(ws, -7).getTime()) }, icon('chevronLeft', 20)),
-    h('button', { class: 'pill-btn', onclick: () => go(weekStartOf(Date.now())) }, 'Heute'),
-    h('button', { class: 'iconbtn plain', title: 'Nächste Woche', 'aria-label': 'Nächste Woche', onclick: () => go(dayAt(ws, 7).getTime()) }, icon('chevronRight', 20)),
-    h('span', { class: 'cal-range' }, `KW ${isoWeek(ws)} · ${fmtDay(new Date(ws))} – ${fmtDay(we)} ${we.getFullYear()}`));
+  const month = cal.view === 'month';
+  const nav = month
+    ? h('div', { class: 'cal-nav' },
+      h('button', { class: 'iconbtn plain', title: 'Voriger Monat', 'aria-label': 'Voriger Monat', onclick: () => goMonth(new Date(cal.month).setMonth(new Date(cal.month).getMonth() - 1)) }, icon('chevronLeft', 20)),
+      h('button', { class: 'pill-btn', onclick: () => goMonth(Date.now()) }, 'Heute'),
+      h('button', { class: 'iconbtn plain', title: 'Nächster Monat', 'aria-label': 'Nächster Monat', onclick: () => goMonth(new Date(cal.month).setMonth(new Date(cal.month).getMonth() + 1)) }, icon('chevronRight', 20)),
+      h('span', { class: 'cal-range' }, new Date(cal.month).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })))
+    : h('div', { class: 'cal-nav' },
+      h('button', { class: 'iconbtn plain', title: 'Vorige Woche', 'aria-label': 'Vorige Woche', onclick: () => go(dayAt(cal.ws, -7).getTime()) }, icon('chevronLeft', 20)),
+      h('button', { class: 'pill-btn', onclick: () => go(weekStartOf(Date.now())) }, 'Heute'),
+      h('button', { class: 'iconbtn plain', title: 'Nächste Woche', 'aria-label': 'Nächste Woche', onclick: () => go(dayAt(cal.ws, 7).getTime()) }, icon('chevronRight', 20)),
+      h('span', { class: 'cal-range' }, `KW ${isoWeek(cal.ws)} · ${fmtDay(new Date(cal.ws))} – ${fmtDay(dayAt(cal.ws, 6))} ${dayAt(cal.ws, 6).getFullYear()}`));
   const cfg = gcfg();
   const actions = h('div', { class: 'lib-actions' },
+    segmented([['week', 'Woche'], ['month', 'Monat']], cal.view, setView),
     cfg.on && !gValid() ? h('button', { class: 'pill-btn', title: 'Google-Kalender laden (Anmeldung erneuern)', onclick: gReload }, icon('sync', 16), 'Google laden') : null,
     h('button', { class: 'pill-btn', title: 'Abos und Google Kalender neu laden', onclick: async e => {
       const b = e.currentTarget; b.disabled = true;
       await refreshFeeds();
-      if (cfg.on) { if (!gValid()) { try { await gToken(); } catch {} } cal.gcache.clear(); await gLoadWeek(true); }
+      if (cfg.on) { if (!gValid()) { try { await gToken(); } catch {} } cal.gcache.clear(); await gLoadRange(true); }
       b.disabled = false; render(); toast('Aktualisiert');
     } }, icon('sync', 16), 'Aktualisieren'),
     h('button', { class: 'pill-btn', onclick: openSources }, icon('gear', 16), 'Quellen'),
@@ -317,27 +395,42 @@ function draw() {
   const titlebar = headEl.querySelector('.lib-titlebar');
   headEl.replaceChildren(...(titlebar ? [titlebar] : []), h('div', { class: 'lib-toolbar cal-toolbar' }, nav, h('div', { class: 'spacer' }), actions));
 
-  const items = weekItems();
+  const legend = h('div', { class: 'cal-legend' },
+    h('span', { class: 'cal-src' }, h('i', { style: { background: FOLIO_COLOR } }), 'Folio'),
+    ...cal.records.filter(r => r.kind === 'calfeed' && !r.deleted).map(r => h('span', { class: 'cal-src' + (r.error ? ' err' : ''), title: r.error || '' }, h('i', { style: { background: r.color } }), (r.url ? 'Abo: ' : 'Import: ') + r.name, r.error ? ' ⚠' : '')),
+    ...(cfg.on ? Object.values(cfg.cals).filter(c => c.on).map(c => h('span', { class: 'cal-src' }, h('i', { style: { background: c.color } }), 'Google: ' + calName(c))) : []),
+    cal.gerr ? h('span', { class: 'cal-src err' }, '⚠ ' + cal.gerr) : null);
+  (month ? drawMonth : drawWeek)(legend, rangeItems());
+}
+
+function drawWeek(legend, items) {
+  const ws = cal.ws;
+  const today = ymd(new Date());
   const days = Array.from({ length: 7 }, (_, i) => dayAt(ws, i));
   const dayStart = days.map(d => d.getTime()), dayEnd = days.map((d, i) => dayAt(ws, i + 1).getTime());
-  const allDay = days.map(() => []), timed = days.map(() => []);
+  // all-day row: all-day events, and the whole days a longer timed event covers — one bar across the days
+  const inBar = (o, i) => o.allDay || (o.end - o.start >= 86400000 && o.start <= dayStart[i] && o.end >= dayEnd[i]);
+  const timed = days.map(() => []);
   for (const o of items) {
     days.forEach((d, i) => {
-      if (o.end <= dayStart[i] && !(o.end === o.start && o.start === dayStart[i]) || o.start >= dayEnd[i]) return;
-      if (o.allDay || o.end - o.start >= 86400000 && o.start <= dayStart[i] && o.end >= dayEnd[i]) allDay[i].push(o);
-      else timed[i].push({ o, s: Math.max(o.start, dayStart[i]), e: Math.max(Math.min(o.end, dayEnd[i]), Math.max(o.start, dayStart[i]) + 15 * 60000) });
+      if (!overlaps(o, dayStart[i], dayEnd[i]) || inBar(o, i)) return;
+      timed[i].push({ o, s: Math.max(o.start, dayStart[i]), e: Math.max(Math.min(o.end, dayEnd[i]), Math.max(o.start, dayStart[i]) + 15 * 60000) });
     });
   }
   const evBtn = (o, style, cls = '') => h('button', {
-    class: 'cal-ev ' + cls, style: { '--ec': o.color, ...style }, title: `${o.title} · ${o.allDay ? 'ganztägig' : fmtTime(o.start) + '–' + fmtTime(o.end)} · ${o.srcName}`,
+    class: 'cal-ev ' + cls, style: { '--ec': o.color, ...style }, title: `${o.title} · ${fmtWhen(o)} · ${o.srcName}`,
     onclick: e => { e.stopPropagation(); openItem(o); },
-  }, h('span', { class: 'cal-ev-title' }, o.title), o.allDay ? null : h('span', { class: 'cal-ev-time' }, `${fmtTime(o.start)}–${fmtTime(o.end)}`));
+  }, h('span', { class: 'cal-ev-title' }, o.title), h('span', { class: 'cal-ev-time' }, `${fmtTime(o.start)}–${fmtTime(o.end)}`));
 
   const heads = h('div', { class: 'cal-row cal-heads' }, h('div', { class: 'cal-gutter' }),
     ...days.map(d => h('div', { class: 'cal-dayhead' + (ymd(d) === today ? ' today' : '') },
       h('span', { class: 'cal-dow' }, d.toLocaleDateString('de-DE', { weekday: 'short' })), h('span', { class: 'cal-dnum' }, d.getDate()))));
-  const alldayRow = allDay.some(x => x.length) ? h('div', { class: 'cal-row cal-allday' }, h('div', { class: 'cal-gutter' }, 'ganztägig'),
-    ...allDay.map(list => h('div', { class: 'cal-adcell' }, list.map(o => evBtn(o, {}, 'chip'))))) : null;
+  const segs = barSegs(items, dayStart, dayEnd, inBar);
+  const n = lanes(segs);
+  const alldayRow = n ? h('div', { class: 'cal-row cal-allday', style: { gridTemplateRows: `repeat(${n}, 24px)` } },
+    h('div', { class: 'cal-gutter', style: { gridRow: '1 / -1' } }, 'ganztägig'),
+    ...days.map((d, i) => h('div', { class: 'cal-adcell', style: { gridColumn: String(i + 2), gridRow: '1 / -1' } })),
+    ...segs.map(s => barBtn(s, 2, s.lane + 1))) : null;
 
   const cols = days.map((d, i) => {
     const col = h('div', { class: 'cal-col' + (ymd(d) === today ? ' today' : ''), 'data-day': ymd(d) });
@@ -353,7 +446,7 @@ function draw() {
     col.addEventListener('click', e => {
       if (e.target !== col) return;
       const y = e.offsetY, mins = Math.max(0, Math.min(23 * 60 + 30, Math.floor(y / HOUR * 2) * 30));
-      editEvent(null, { date: ymd(d), start: `${pad(mins / 60 | 0)}:${pad(mins % 60)}`, end: `${pad(Math.min(23, (mins / 60 | 0) + 1))}:${pad(mins % 60)}` });
+      editEvent(null, { date: ymd(d), start: `${pad(mins / 60 | 0)}:${pad(mins % 60)}`, end: hourLater(mins) });
     });
     return col;
   });
@@ -361,12 +454,6 @@ function draw() {
   const body = h('div', { class: 'cal-body', style: { height: 24 * HOUR + 'px' } }, hours, ...cols);
   const scroller = h('div', { class: 'cal-scroll' }, body);
   scroller.addEventListener('scroll', () => { cal.scroll = scroller.scrollTop; });
-
-  const legend = h('div', { class: 'cal-legend' },
-    h('span', { class: 'cal-src' }, h('i', { style: { background: FOLIO_COLOR } }), 'Folio'),
-    ...cal.records.filter(r => r.kind === 'calfeed' && !r.deleted).map(r => h('span', { class: 'cal-src' + (r.error ? ' err' : ''), title: r.error || '' }, h('i', { style: { background: r.color } }), (r.url ? 'Abo: ' : 'Import: ') + r.name, r.error ? ' ⚠' : '')),
-    ...(cfg.on ? Object.values(cfg.cals).filter(c => c.on).map(c => h('span', { class: 'cal-src' }, h('i', { style: { background: c.color } }), 'Google: ' + calName(c))) : []),
-    cal.gerr ? h('span', { class: 'cal-src err' }, '⚠ ' + cal.gerr) : null);
 
   bodyEl.replaceChildren(h('div', { class: 'cal' }, legend, h('div', { class: 'cal-grid' }, heads, alldayRow, scroller)));
   // first view: this week → the current time in the upper third; other weeks → from 7:00 (or the earliest event)
@@ -377,19 +464,93 @@ function draw() {
   scroller.scrollTop = cal.scroll ?? Math.max(0, first);
 }
 
+// Month (like Apple Calendar): 6 weeks; all-day and multi-day events as bars across the days,
+// the others as "• 10:00 Title"; what does not fit is "+3 weitere" (→ that week).
+// cal.mLines (lines per day) follows the height of the rows: measured after drawing.
+function drawMonth(legend, items, again = false) {
+  const gs = weekStartOf(cal.month), m = new Date(cal.month).getMonth();
+  const today = ymd(new Date());
+  const L = cal.mLines, ROW = 1; // grid row of the day numbers; event lines start below
+  const weeks = [];
+  for (let w = 0; w < 6; w++) {
+    const days = Array.from({ length: 7 }, (_, i) => dayAt(gs, w * 7 + i));
+    const ds = days.map(d => d.getTime()), de = days.map((d, i) => dayAt(gs, w * 7 + i + 1).getTime());
+    const inWeek = items.filter(o => overlaps(o, ds[0], de[6]));
+    // bars: all-day events and ones of a day or longer; a short one over midnight is a line on its first day
+    const isBar = o => o.allDay || (multiDay(o) && o.end - o.start >= 86400000);
+    const startsOn = (o, i) => (o.start >= ds[i] && o.start < de[i]) || (i === 0 && o.start < ds[0]);
+    const segs = barSegs(inWeek.filter(isBar), ds, de, () => true);
+    lanes(segs);
+    // per day: lanes taken by bars, then the other events in the free lanes, by time
+    const used = days.map((_, i) => new Set(segs.filter(s => s.a <= i && i <= s.b).map(s => s.lane)));
+    const singles = days.map((_, i) => inWeek.filter(o => !isBar(o) && startsOn(o, i)).sort((a, b) => a.start - b.start)
+      .map(o => { let l = 0; while (used[i].has(l)) l++; used[i].add(l); return { o, lane: l }; }));
+    const lim = days.map((_, i) => (Math.max(-1, ...used[i]) >= L ? L - 1 : L)); // one line less when "+N" is needed
+    const hidden = days.map(() => 0);
+    const cells = days.map((d, i) => {
+      const other = d.getMonth() !== m, we = i >= 5;
+      const cell = h('div', { class: 'calm-day' + (other ? ' other' : '') + (we ? ' weekend' : '') + (ymd(d) === today ? ' today' : ''), style: { gridColumn: String(i + 1), gridRow: '1 / -1' } },
+        h('button', { class: 'calm-num', title: 'Woche zeigen', onclick: e => { e.stopPropagation(); setView('week', weekStartOf(d)); } }, d.getDate() === 1 ? d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }) : String(d.getDate())));
+      // tap on free space → new event that day
+      cell.addEventListener('click', e => { if (e.target === cell) editEvent(null, slotOn(ymd(d))); });
+      return cell;
+    });
+    const out = [];
+    for (const s of segs) { // a bar is drawn on the days where its lane fits, as one piece per run of days
+      let a = -1;
+      for (let i = s.a; i <= s.b + 1; i++) {
+        const fits = i <= s.b && s.lane < lim[i];
+        if (i <= s.b && !fits) hidden[i]++;
+        if (fits && a < 0) a = i;
+        if (!fits && a >= 0) { out.push(barBtn(s, 1, ROW + 1 + s.lane, a, i - 1)); a = -1; }
+      }
+    }
+    days.forEach((d, i) => {
+      for (const x of singles[i]) {
+        if (x.lane >= lim[i]) { hidden[i]++; continue; }
+        const o = x.o;
+        out.push(h('button', {
+          class: 'calm-ev', style: { '--ec': o.color, gridColumn: String(i + 1), gridRow: String(ROW + 1 + x.lane) },
+          title: `${o.title} · ${fmtWhen(o)} · ${o.srcName}`, onclick: e => { e.stopPropagation(); openItem(o); },
+        }, h('i'), h('span', { class: 'calm-time' }, fmtTime(o.start)), h('span', { class: 'calm-title' }, o.title)));
+      }
+      if (hidden[i]) out.push(h('button', {
+        class: 'calm-more', style: { gridColumn: String(i + 1), gridRow: String(ROW + 1 + L - 1) },
+        onclick: e => { e.stopPropagation(); setView('week', weekStartOf(d)); },
+      }, `+${hidden[i]} weitere`));
+    });
+    weeks.push(h('div', { class: 'calm-week', style: { gridTemplateRows: `26px repeat(${L}, 20px)` } }, ...cells, ...out));
+  }
+  const heads = h('div', { class: 'calm-heads' }, ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((x, i) => h('div', { class: i >= 5 ? 'weekend' : '' }, x)));
+  const grid = h('div', { class: 'cal-grid calm' }, heads, h('div', { class: 'calm-weeks' }, weeks));
+  bodyEl.replaceChildren(h('div', { class: 'cal' }, legend, grid));
+  // as many lines per day as the row height holds (the window decides): redraw once if that changed
+  const rowH = weeks[0].getBoundingClientRect().height;
+  const fit = Math.max(1, Math.floor((rowH - 28) / 21));
+  if (rowH && fit !== cal.mLines && !again) { cal.mLines = fit; drawMonth(legend, items, true); }
+}
+addEventListener('resize', () => { if (cal.view === 'month' && bodyEl?.querySelector('.calm')) render(); });
+
+// an hour after mins (minutes of the day), at most 23:59 (the same day)
+const hourLater = mins => (mins + 60 >= 24 * 60 ? '23:59' : `${pad((mins + 60) / 60 | 0)}:${pad(mins % 60)}`);
+function slotOn(date) {
+  const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
+  const s = date === ymd(new Date()) && d.getDate() === new Date().getDate() ? d.getHours() : 9;
+  return { date, start: `${pad(s)}:00`, end: hourLater(s * 60) };
+}
 function defaultSlot() {
+  if (cal.view === 'month') return slotOn(monthStartOf(Date.now()) === cal.month ? ymd(new Date()) : ymd(new Date(cal.month)));
   const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
   const ws = cal.ws, inWeek = d.getTime() >= ws && d.getTime() < dayAt(ws, 7).getTime();
   const date = inWeek ? ymd(d) : ymd(new Date(ws));
   const s = inWeek ? d.getHours() : 9;
-  return { date, start: `${pad(s)}:00`, end: `${pad(Math.min(23, s + 1))}:00` };
+  return { date, start: `${pad(s)}:00`, end: hourLater(s * 60) };
 }
 
 // ---------- Event sheets ----------
 function openItem(o) {
   if (o.editable) return editEvent(o);
-  const when = o.allDay ? `${new Date(o.start).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })} · ganztägig`
-    : `${new Date(o.start).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })} · ${fmtTime(o.start)}–${fmtTime(o.end)}`;
+  const when = fmtWhen(o);
   sheet({
     title: 'Termin', done: 'OK', cancel: false,
     body: h('div', { class: 'cal-detail' },
@@ -407,14 +568,27 @@ async function editEvent(o, slot) {
   const isNew = !o;
   const cfg = gcfg();
   const r = o?.source === 'folio' ? o.rec : null;
-  const v = isNew ? { title: '', ...slot, repeat: 'none', until: '' }
-    : { title: o.title, date: ymd(new Date(o.start)), start: hm(new Date(o.start)), end: hm(new Date(o.end)), repeat: r?.weekly ? 'weekly' : 'none', until: r?.until || '' };
+  // all-day: the end is exclusive (next midnight) — the sheet shows the last day
+  const v = isNew ? { title: '', endDate: slot.date, allDay: false, ...slot, repeat: 'none', until: '' }
+    : { title: o.title, date: ymd(new Date(o.start)), endDate: ymd(new Date(o.allDay ? Math.max(o.start, o.end - 86400000) : o.end)), allDay: !!o.allDay,
+      start: o.allDay ? '09:00' : hm(new Date(o.start)), end: o.allDay ? '10:00' : hm(new Date(o.end)), repeat: r?.weekly ? 'weekly' : 'none', until: r?.until || '' };
   let scope = 'one', action = 'save';
   let target = isNew ? (cfg.on && writable(cfg.cals[cfg.target]) ? cfg.target : 'folio') : null;
   const title = h('input', { class: 'field big', placeholder: 'Titel', value: v.title });
   const date = h('input', { class: 'field', type: 'date', value: v.date });
+  const endDate = h('input', { class: 'field', type: 'date', value: v.endDate });
   const start = h('input', { class: 'field', type: 'time', value: v.start, step: 300 });
   const end = h('input', { class: 'field', type: 'time', value: v.end, step: 300 });
+  // moving the start day moves the end day along (the length stays)
+  let prevDate = v.date;
+  date.addEventListener('change', () => {
+    if (date.value && prevDate && endDate.value) endDate.value = addDays(endDate.value, daysBetween(prevDate, date.value));
+    prevDate = date.value;
+  });
+  let allDay = v.allDay;
+  const showTimes = () => { start.hidden = end.hidden = allDay; };
+  const allDayRow = toggle('Ganztägig', allDay, x => { allDay = x; showTimes(); });
+  showTimes();
   const until = h('input', { class: 'field', type: 'date', value: v.until });
   const untilRow = h('div', { class: 'cal-until', hidden: v.repeat !== 'weekly' }, h('span', { class: 'form-label' }, 'Wiederholen bis (optional)'), until);
   let repeat = v.repeat;
@@ -433,7 +607,10 @@ async function editEvent(o, slot) {
   const del = !isNew ? h('button', { class: 'pill-btn danger cal-del', onclick: e => { action = 'delete'; e.currentTarget.closest('.sheet').querySelector('.textbtn.strong').click(); } }, icon('trash', 16), recurring ? 'Löschen …' : 'Löschen') : null;
   const body = h('div', { class: 'form cal-form' },
     title,
-    h('div', { class: 'cal-when' }, h('div', {}, h('div', { class: 'form-label' }, 'Datum'), date), h('div', {}, h('div', { class: 'form-label' }, 'Beginn'), start), h('div', {}, h('div', { class: 'form-label' }, 'Ende'), end)),
+    allDayRow,
+    h('div', { class: 'cal-when' },
+      h('div', { class: 'form-label' }, 'Beginn'), h('div', { class: 'cal-when-row' }, date, start),
+      h('div', { class: 'form-label' }, 'Ende'), h('div', { class: 'cal-when-row' }, endDate, end)),
     scopeCtl, gSeriesNote, repeatWrap,
     targetSel ? h('div', {}, h('div', { class: 'form-label' }, 'Speichern in'), targetSel) : null,
     !isNew ? h('div', { class: 'cal-detail-src' }, h('i', { style: { background: o.color } }), 'Quelle: ' + o.srcName) : null,
@@ -442,12 +619,16 @@ async function editEvent(o, slot) {
     title: isNew ? 'Neuer Termin' : 'Termin', done: 'Sichern', body,
     onDone: () => {
       if (action === 'delete') return true;
-      if (!date.value || !start.value || !end.value) { toast('Bitte Datum, Beginn und Ende angeben'); return false; }
+      if (!date.value || !endDate.value || (!allDay && (!start.value || !end.value))) { toast('Bitte Beginn und Ende angeben'); return false; }
+      if (endDate.value < date.value) { toast('Das Ende liegt vor dem Beginn'); return false; }
+      if (!allDay && endDate.value > date.value && endDate.value + end.value <= date.value + start.value) { toast('Das Ende liegt vor dem Beginn'); return false; }
       return true;
     },
   });
   if (!res) return;
-  const val = { title: title.value.trim() || '(ohne Titel)', date: date.value, start: start.value, end: end.value, weekly: repeat === 'weekly', until: repeat === 'weekly' && until.value ? until.value : null };
+  // same day with the end before the start: ends the next day (as before multi-day events)
+  const ed = !allDay && endDate.value === date.value && end.value <= start.value ? addDays(date.value, 1) : endDate.value;
+  const val = { title: title.value.trim() || '(ohne Titel)', date: date.value, endDate: ed, start: start.value, end: end.value, allDay, weekly: repeat === 'weekly', until: repeat === 'weekly' && until.value ? until.value : null };
   try {
     if (action === 'delete') await deleteItem(o, recurring ? await askScope() : 'all');
     else if (isNew) await createEvent(val, target);
@@ -467,26 +648,26 @@ async function createEvent(v, target) {
   const now = Date.now();
   if (target && target !== 'folio') {
     if (!gValid()) await gToken();
-    const body = { summary: v.title, ...gTimes(v.date, v.start, v.end) };
+    const body = { summary: v.title, ...gTimes(v) };
     if (v.weekly) body.recurrence = [`RRULE:FREQ=WEEKLY${v.until ? `;UNTIL=${v.until.replace(/-/g, '')}T235959Z` : ''}`];
     await gapi(`calendars/${encodeURIComponent(target)}/events`, { method: 'POST', body: JSON.stringify(body) });
-    cal.gcache.clear(); await gLoadWeek(true);
+    cal.gcache.clear(); await gLoadRange(true);
     toast('In Google Kalender gespeichert');
     return;
   }
-  await store.put({ kind: 'event', id: uid(), name: v.title, title: v.title, date: v.date, start: v.start, end: v.end, tz: localTz(), weekly: v.weekly, until: v.until, exceptions: {}, created: now, updated: now });
+  await store.put({ kind: 'event', id: uid(), name: v.title, title: v.title, date: v.date, endDate: v.endDate, start: v.start, end: v.end, allDay: v.allDay, tz: localTz(), weekly: v.weekly, until: v.until, exceptions: {}, created: now, updated: now });
 }
 
 async function saveOwn(o, v, scope) {
   const r = o.rec;
   if (r.weekly && scope === 'one') {
-    r.exceptions = { ...(r.exceptions || {}), [o.occDate]: { title: v.title, date: v.date, start: v.start, end: v.end } };
+    r.exceptions = { ...(r.exceptions || {}), [o.occDate]: { title: v.title, date: v.date, endDate: v.endDate, start: v.start, end: v.end, allDay: v.allDay } };
   } else {
-    // whole series: a changed date moves the series by the same number of days
-    const shift = Math.round((Date.parse(v.date) - Date.parse(o.occDate)) / 86400000);
-    let first = r.date;
-    if (shift) { const d = new Date(r.date + 'T00:00'); d.setDate(d.getDate() + shift); first = ymd(d); }
-    Object.assign(r, { title: v.title, name: v.title, start: v.start, end: v.end, date: r.weekly ? first : v.date, weekly: v.weekly, until: v.until });
+    // whole series: a changed date moves the series by the same number of days; the length is the new one
+    const shift = daysBetween(o.occDate, v.date);
+    const first = shift ? addDays(r.date, shift) : r.date;
+    const date = r.weekly ? first : v.date;
+    Object.assign(r, { title: v.title, name: v.title, start: v.start, end: v.end, allDay: v.allDay, date, endDate: addDays(date, daysBetween(v.date, v.endDate)), weekly: v.weekly, until: v.until });
     if (!v.weekly) r.exceptions = {};
   }
   r.updated = Date.now();
@@ -496,9 +677,9 @@ async function saveOwn(o, v, scope) {
 async function saveGoogle(o, v, scope) {
   if (!gValid()) await gToken();
   const id = scope === 'all' && o.recurringEventId ? o.recurringEventId : o.id;
-  const body = scope === 'all' && o.recurringEventId ? { summary: v.title } : { summary: v.title, ...gTimes(v.date, v.start, v.end) };
+  const body = scope === 'all' && o.recurringEventId ? { summary: v.title } : { summary: v.title, ...gTimes(v) };
   await gapi(`calendars/${encodeURIComponent(o.calId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) });
-  cal.gcache.clear(); await gLoadWeek(true);
+  cal.gcache.clear(); await gLoadRange(true);
 }
 
 async function deleteItem(o, scope) {
@@ -511,7 +692,7 @@ async function deleteItem(o, scope) {
     if (!gValid()) await gToken();
     const id = scope === 'all' && o.recurringEventId ? o.recurringEventId : o.id;
     await gapi(`calendars/${encodeURIComponent(o.calId)}/events/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    cal.gcache.clear(); await gLoadWeek(true);
+    cal.gcache.clear(); await gLoadRange(true);
   }
   toast('Gelöscht');
 }

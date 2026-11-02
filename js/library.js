@@ -144,7 +144,7 @@ function items() {
 }
 
 export async function renderLibrary() {
-  records = (await store.list()).filter(r => !CAL_KINDS.has(r.kind)); // calendar records live in the calendar view
+  records = (await store.list()).filter(r => !CAL_KINDS.has(r.kind) && r.kind !== 'prefs'); // calendar records live in the calendar view
   if (lib.folder && (!byId(lib.folder) || byId(lib.folder).trashed)) lib.folder = null;
   renderSidebar();
   if (lib.section === 'learn') { // all flashcard decks at a glance (learnplan.js)
@@ -731,7 +731,7 @@ async function duplicate(ids) {
 
 // Folder picker sheet. Resolves to a folder id, null for the top level, or undefined when cancelled.
 async function pickFolder(title, doneLabel, { exclude = new Set(), preselect } = {}) {
-  records = (await store.list()).filter(r => !CAL_KINDS.has(r.kind)); // calendar records live in the calendar view
+  records = (await store.list()).filter(r => !CAL_KINDS.has(r.kind) && r.kind !== 'prefs'); // calendar records live in the calendar view
   const folders = live().filter(r => r.kind === 'folder' && !r.trashed && !exclude.has(r.id));
   let target = preselect;
   const tree = (parent, depth) => folders.filter(f => (f.parent || null) === parent).sort((a, b) => a.name.localeCompare(b.name, 'de'))
@@ -1093,7 +1093,7 @@ async function importGoodnotesFolder(file, zip) {
 
   const parent = await pickFolder(`${label} importieren nach`, 'Weiter', { preselect: lib.section === 'docs' ? lib.folder : null });
   if (parent === undefined) return;
-  records = (await store.list()).filter(r => !CAL_KINDS.has(r.kind));
+  records = (await store.list()).filter(r => !CAL_KINDS.has(r.kind) && r.kind !== 'prefs');
   const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const existingFolder = (name, par) => live().find(r => r.kind === 'folder' && !r.trashed && (r.parent || null) === par && sameName(r.name, name));
   const clashes = roots.filter(n => existingFolder(n, parent));
@@ -1368,6 +1368,7 @@ function storageBox() {
       if (r.deleted) return;
       const n = size(r);
       if (CAL_KINDS.has(r.kind)) { calBytes += n; return; }
+      if (r.kind === 'prefs') return; // the synced tool row (prefs.js), a few KB
       docBytes += n; sizes.set(r.id, n);
       docs.push({ id: r.id, name: r.name, kind: r.kind, offloaded: r.offloaded, size: r.size });
     });

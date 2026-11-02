@@ -1120,7 +1120,8 @@ button.sz-row:hover { background: var(--surface-3); }
 .cal-dnum { font-size: 17px; font-weight: 600; color: var(--text); }
 .cal-dayhead.today .cal-dnum { background: var(--accent); color: var(--surface); border-radius: 999px; min-width: 28px; padding: 1px 6px; text-align: center; }
 .cal-allday { border-bottom: 1px solid var(--sep); }
-.cal-adcell { border-left: 1px solid var(--sep); padding: 3px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cal-allday { row-gap: 2px; padding: 3px 0; }
+.cal-adcell { border-left: 1px solid var(--sep); min-width: 0; margin: -3px 0; }
 .cal-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .cal-body { position: relative; }
 .cal-hours { position: relative; }
@@ -1143,7 +1144,10 @@ button.sz-row:hover { background: var(--surface-3); }
 .cal-ev.stacked { box-shadow: 0 0 0 1.5px var(--surface); }
 .cal-ev.short { flex-direction: row; gap: 6px; align-items: center; white-space: nowrap; }
 .cal-ev.chip { position: static; width: 100%; padding: 2px 6px; white-space: nowrap; }
-.cal-form .cal-when { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.cal-form .cal-when { display: flex; flex-direction: column; gap: 6px; }
+.cal-when-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.cal-when-row > [hidden] { display: none; }
+.cal-when-row:has(> [hidden]) { grid-template-columns: 1fr; }
 .cal-until { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .cal-until[hidden], .cal-form [hidden], .cal-note[hidden] { display: none; }
 .cal-detail { display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.4; }
@@ -1169,8 +1173,6 @@ button.sz-row:hover { background: var(--surface-3); }
   .cal-nav { flex-wrap: wrap; }
   .cal-toolbar .lib-actions { flex-wrap: wrap; }
   .cal-range { width: 100%; margin: 4px 0 0; }
-  .cal-form .cal-when { grid-template-columns: 1fr 1fr; }
-  .cal-form .cal-when > :first-child { grid-column: 1 / -1; }
 }
 
 .import-report { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-2); line-height: 1.5; max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
@@ -1620,3 +1622,49 @@ button.sz-row:hover { background: var(--surface-3); }
 .dk-row-img { max-height: 30px; max-width: 160px; border-radius: 4px; border: 1px solid var(--sep); background: #fff; }
 .fc-img { display: block; max-width: 100%; margin: 0 auto 10px; border-radius: 6px; box-shadow: 0 0 0 1px var(--sep); background: #fff; }
 .fc-ref { margin: 14px auto 0; display: flex; }
+
+/* ---------- Lesemodus (editor.js setReading): only viewing, no header or tools ---------- */
+#editor.reading .toolbar, #editor.reading .tabbar, #editor.reading #optdock, #editor.reading #undoPill, #editor.reading #thumbs { display: none !important; }
+#editor.reading .ed-body { padding-top: env(safe-area-inset-top); }
+#editor.reading #scroller { cursor: grab; }
+.read-pill { right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); height: 44px; border-radius: 14px; padding: 0 4px; gap: 2px; }
+.read-pill[hidden] { display: none; }
+.read-pill button { height: 36px; min-width: 36px; padding: 0 8px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--accent); font-size: 14px; font-weight: 600; transition: background var(--dur) ease; }
+.read-pill button:hover { background: var(--fill); }
+.read-pill .read-edit { padding: 0 12px 0 10px; }
+
+/* ---------- Calendar: bars across days, month view (calendar.js, ab v80) ---------- */
+.cal-bar {
+  position: relative; z-index: 1; min-width: 0; margin: 0 3px; padding: 0 7px; height: 100%;
+  display: flex; align-items: center; border-radius: 6px; font-size: 12px; font-weight: 600; text-align: left;
+  background: color-mix(in srgb, var(--ec) 24%, var(--surface)); color: var(--text); cursor: pointer;
+  box-shadow: inset 3px 0 0 var(--ec);
+}
+.cal-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-bar:hover { background: color-mix(in srgb, var(--ec) 36%, var(--surface)); }
+.cal-bar.open-l { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; box-shadow: none; }
+.cal-bar.open-r { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+.calm { display: flex; flex-direction: column; }
+.calm-heads { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--sep); }
+.calm-heads > div { padding: 8px 10px; font-size: 13px; font-weight: 600; color: var(--text-2); text-align: right; }
+.calm-heads > .weekend { color: var(--text-3); }
+.calm-weeks { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.calm-week { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 1px; align-content: start; overflow: hidden; border-bottom: 1px solid var(--sep); }
+.calm-week:last-child { border-bottom: 0; }
+.calm-day { min-width: 0; border-left: 1px solid var(--sep); display: flex; justify-content: flex-end; align-items: flex-start; padding: 3px 5px 0; cursor: default; }
+.calm-day:first-child { border-left: 0; }
+.calm-day.weekend { background: var(--surface-2); }
+.calm-day.today { background: var(--cal-today); }
+.calm-num { height: 24px; min-width: 24px; padding: 0 6px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.calm-num:hover { background: var(--fill); }
+.calm-day.other .calm-num { color: var(--text-3); }
+.calm-day.today .calm-num { background: var(--accent); color: var(--surface); font-weight: 600; }
+.calm-ev, .calm-more { position: relative; z-index: 1; min-width: 0; margin: 0 3px; padding: 0 4px; height: 100%; display: flex; align-items: center; gap: 5px; border-radius: 5px; font-size: 12px; text-align: left; color: var(--text); white-space: nowrap; overflow: hidden; cursor: pointer; }
+.calm-ev:hover, .calm-more:hover { background: var(--fill); }
+.calm-ev > i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ec); }
+.calm-time { flex: none; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.calm-title { overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.calm-more { color: var(--text-2); font-weight: 600; }
+.calm .cal-bar { font-size: 12px; }
+@media (max-width: 900px) { .calm-time { display: none; } }

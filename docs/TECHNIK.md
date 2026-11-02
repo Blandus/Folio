@@ -70,14 +70,30 @@ OAuth-Zustimmungsbildschirm mit Startseite und Datenschutz-Link (`datenschutz.ht
 (im Testmodus können sich nur eingetragene Testnutzer anmelden). Für den Kalender zusätzlich die Schritte unter
 **Kalender → Google Kalender einrichten**.
 
-## Kalender (Wochenansicht)
-Seitenleiste → **Kalender**. Wochenansicht Mo–So mit durchgehender Zeitachse (keine festen Blöcke), Wochen vor/zurück,
+## Kalender (Woche und Monat)
+Seitenleiste → **Kalender**. Oben **Woche | Monat** (pro Gerät gemerkt, `settings.calView`).
+
+**Woche:** Mo–So mit durchgehender Zeitachse (keine festen Blöcke), Wochen vor/zurück,
 **Heute**, rote Linie für die aktuelle Uhrzeit, Zeile für ganztägige Termine. Überschneidende Termine stehen leicht
 versetzt nebeneinander und bleiben antippbar. Jeder Termin zeigt seine Quelle (Farbe; Name in den Details und in der
-Legende über dem Raster).
+Legende über dem Raster). **Ab v80** stehen ganztägige und mehrtägige Termine in der Ganztägig-Zeile als **ein
+durchgehender Balken** über ihre Tage (wie Apple Kalender; über den Wochenrand hinaus an der Seite offen). Mehrtägige
+Termine mit Uhrzeit: erster und letzter Tag als Block in den Spalten, volle Tage dazwischen im Balken.
+
+**Monat (ab v80, nach Apple Kalender):** 6 Wochen × 7 Tage, Mo zuerst; heute als farbiger Kreis, Tage aus Vor-/
+Folgemonat blass, Wochenende leicht abgesetzt, der 1. mit Monatsnamen. Ganztägige Termine und Termine ab 24 Stunden
+als Balken über die Tage; andere als „• 10:00 Titel“ an ihrem ersten Tag (unter 900 px Breite ohne Uhrzeit). Wie
+viele Zeilen ein Tag zeigt, folgt der Zeilenhöhe (nach dem Zeichnen gemessen, bei Größenänderung neu); der Rest steht
+als „+3 weitere“. Antippen: Termin → öffnet ihn; Tageszahl oder „+N weitere“ → Wochenansicht dieser Woche; freie
+Fläche → neuer Termin an dem Tag. Google-Termine werden für alle 6 Wochen geladen (Cache je sichtbarem Zeitraum).
 
 - **Eigene Termine** (ohne Google): **+ Termin** oder in eine freie Stelle tippen (Startzeit in 30-Minuten-Schritten).
-  Titel, Datum, Beginn, Ende, *Einmalig* oder *Wöchentlich* (optional „bis“). Bei wiederholten Terminen:
+  Titel, **Ganztägig**, **Beginn (Datum + Uhrzeit)**, **Ende (Datum + Uhrzeit)** – ab v80 auch über mehrere Tage; das
+  Enddatum wandert beim Ändern des Startdatums mit. Gleicher Tag mit Ende vor Beginn = endet am nächsten Tag (wie
+  vorher). Gespeichert als `date`, `endDate`, `start`, `end`, `allDay`; ältere Termine ohne `endDate` gelten wie
+  bisher. Wöchentlich wiederholte Termine können mehrtägig sein (die Länge wird mitverschoben); geänderte
+  Einzeltermine speichern ihr eigenes `endDate`/`allDay`. Google-Termine: ganztägig als `date` mit exklusivem Ende,
+  sonst `dateTime` mit Zeitzone. *Einmalig* oder *Wöchentlich* (optional „bis“). Bei wiederholten Terminen:
   **Nur dieser Termin** (ändern oder absagen) oder **Ganze Serie**. Gespeichert lokal und – mit Drive-Sync – als eigene
   Datensätze in deinem Drive-Ordner; konfliktfähig wie Dokumente.
 - **ICS-Abo (URL):** **Quellen → Adresse eingeben → Abonnieren** (`https://` oder `webcal://`). Neu geladen wird nur
@@ -102,6 +118,11 @@ Legende über dem Raster).
   Titel). Abonnierte/fremde Kalender sind nur lesbar. Token und Google-Termine liegen nur im Arbeitsspeicher, nach
   ~1 Stunde lädt **Google laden** bzw. **Aktualisieren** mit einem Tipp neu.
 
+Getestet (v80) im Browser mit Folio-Terminen (1180×820 dunkel, 820×1180 hell): ganztägig über 5 Tage, Fr 18:00–So
+12:00, vier Termine an einem Tag („+3 weitere“), über Mitternacht, über den Monatswechsel; Anlegen über das Fenster,
+Bearbeiten, Tageszahl → Woche. **Nicht getestet:** Anlegen/Ändern mehrtägiger Termine in echtem Google Kalender,
+echtes iPad.
+
 ### Google Kalender einrichten (einmalig, Betreiber)
 In derselben Google-Cloud-Console-Konfiguration wie für Drive:
 1. **APIs & Dienste → Bibliothek → Google Calendar API** aktivieren.
@@ -116,6 +137,17 @@ Folio fordert die Kalender-Bereiche mit einem **eigenen** Token an (`include_gra
 auf „Mit Google Kalender verbinden“. Verwendete Schnittstellen (Calendar API v3): `GET users/me/calendarList`,
 `GET calendars/{id}/events` (singleEvents, Zeitraum der Woche), `POST …/events`, `PATCH …/events/{id}`,
 `DELETE …/events/{id}`.
+
+## Lesemodus (ab v79)
+Im Notizbuch das Buch-Symbol oben rechts (**Lesemodus (nur ansehen)**). Kopfzeile, Tabs, Werkzeug-Optionen,
+Rückgängig und Seitenübersicht verschwinden; oben rechts bleibt eine kleine Leiste mit **‹** (Bibliothek) und
+**Bearbeiten** (auch Esc). Seitenanzeige und Zoom bleiben. Nichts lässt sich ändern: Apple Pencil, Finger und Maus
+scrollen und zoomen nur (in `onDown`/`onMove` in `js/tools.js` wie Finger behandelt, ohne Doppeltipp und ohne langes
+Drücken → Einsetzen), Rechtsklick-Einsetzen ist aus, Tastatur nur Suchen (Strg+F), Zoom (Strg+±/0) und Blättern.
+Der Modus bleibt beim Wechsel zwischen Dokumenten an, bis „Bearbeiten“; nach einem Neustart ist er aus. Beim Ein- und
+Ausschalten bleibt die Stelle im Dokument (Anteil der Scrollhöhe). Ohne Kopfzeile beginnt die Seite unter der
+Statusleiste (`env(safe-area-inset-top)`). Getestet im Browser (1180×820): Ziehen zeichnet nicht, Tastenkürzel
+gesperrt, Esc beendet. Nicht auf dem echten iPad mit Pencil getestet.
 
 ## Unendliche Notizbücher (ab v52)
 Im Dialog „Neues Notizbuch“ gibt es neben A4 und Letter das Format **„Unendlich“** (wie das Whiteboard in Goodnotes):
@@ -373,6 +405,22 @@ IndexedDB, wird nie hochgeladen). Beim Sync:
 - Die Basis verdoppelt ungefähr den lokalen Speicherbedarf synchronisierter Dokumente.
 - Nach einem Zusammenführen im offenen Dokument wird der Rückgängig-Verlauf dieses Dokuments geleert.
 
+### Werkzeugleiste auf allen Geräten (ab v78)
+Stifte (Art, Farben, Stärken, gewählte Farbe und Stärke, Spitze/Druck/Glätten, Gesten), Textmarker, Formen, Radierer,
+Lasso, Text, Laser, die Favoriten, „Eigene Farben“ und die gewählte Palette werden mit Google Drive synchronisiert
+(`js/prefs.js`). Sie liegen in einem Datensatz `{ kind: 'prefs', id: 'prefs-tools', tools, customColors, palette }`,
+den der normale Sync wie ein Dokument überträgt; die Bibliothek zeigt ihn nicht. Pro Gerät bleiben: das gerade
+gewählte Werkzeug, die Druck-Kalibrierung des Stifts, „Nur mit Stift zeichnen“, Lage der Optionsleiste, Seitenübersicht.
+- Geschrieben wird nur, wenn sich die Werkzeugleiste ändert (bemerkt über `saveSettings`, 0,8 s verzögert). Beim
+  ersten Start mit v78 wird nichts gesendet: ein Gerät übernimmt die Leiste der anderen, sobald dort einmal etwas
+  geändert wurde. **Einmal am Gerät mit der richtigen Leiste etwas antippen/ändern**, dann folgen die anderen.
+- Empfangen: `T` und `PALETTE` werden an Ort und Stelle ersetzt (andere Module halten sie), die Optionsleiste und das
+  Karteikarten-Schreibfeld neu gezeichnet; das Übernehmen schreibt nichts zurück.
+- Gleichzeitig auf zwei Geräten geändert: der Datensatz wird wie andere zusammengeführt; die Felder sind ganze
+  Objekte, bei echter Gleichzeitigkeit gilt die Leiste dieses Geräts.
+Getestet im Browser (Änderung schreibt den Datensatz, empfangene Leiste wird übernommen und angezeigt, kein
+Zurückschreiben). Nicht mit echtem Google Drive zwischen zwei Geräten getestet.
+
 ## PDF und Goodnotes aus der Zwischenablage auf dem iPad
 
 1. In Goodnotes das Dokument als **PDF** oder **Goodnotes** exportieren und im Teilen-Menü **Kopieren** wählen; alternativ eine Datei in der Dateien-App kopieren.
@@ -626,6 +674,7 @@ notizen/
   js/inkpad.js    Handschrift auf Karteikarten: Schreibfeld und Anzeige (Notizbuch-Stift-Engine)
   js/learnplan.js Lernübersicht: alle Stapel, heute fällig, Prognose, Aktivität, oft vergessene Karten
   js/versions.js  Durchgänge (Versionen) eines Notizbuchs, Export mehrerer Versionen, Skript ↔ Karteikarten
+  js/prefs.js     Werkzeugleiste über Google Drive auf allen Geräten gleich
   js/store.js     Datenmodell, IndexedDB, Einstellungen
   js/ui.js        Popover, Menüs, Sheets, Dialoge, Toasts
   js/pdf.js       PDF-Import/-Export, Bilder
@@ -633,7 +682,7 @@ notizen/
   js/merge.js     Drei-Wege-Zusammenführung für den Sync (rein, ohne I/O)
   js/offload.js   Speicher optimieren: große Dokumente nur in Google Drive (Hüllen, Nachladen)
   js/pdfdoc.js    Original-PDFs: speichern, Seiten bei Bedarf rendern, Nachladen aus Drive
-  js/calendar.js  Kalender: Wochenansicht, eigene Termine, Abos/Importe, Google Kalender
+  js/calendar.js  Kalender: Woche und Monat, eigene (auch mehrtägige) Termine, Abos/Importe, Google Kalender
   js/ics.js       iCalendar lesen und Wiederholungen auflösen (rein, ohne I/O)
 design/folio-reference.png   Design-Referenz
 ```
