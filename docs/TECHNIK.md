@@ -781,7 +781,8 @@ design/folio-reference.png   Design-Referenz
   bisher. Bearbeiten (Text-Werkzeug, antippen) und Verschieben/Breite (Griffe bzw. Lasso) sind getrennt.
 - **Rechteck-Lasso** zusätzlich zum freien Lasso (Umschalter in der Lasso-Leiste), gleiche Filter und Aktionen, Vorschau
   beim Aufziehen.
-- **Ordner:** Farbe (Folio-Palette oder eigene Farbe) und Symbol (14 Linien-Symbole) über ··· → **Farbe & Symbol**;
+- **Ordner:** Farbe (Reiter Folio, Standard, Pastell, Kräftig, Graustufen – dieselben Paletten wie die Stiftfarben,
+  aber der Reiterwechsel im Dialog ändert die Stift-Palette nicht – oder eigene Farbe) und Symbol (14 Linien-Symbole) über ··· → **Farbe & Symbol**;
   sichtbar in Kachel, Liste, Seitenleiste und Ordnerauswahl; synchronisiert; alte Ordner behalten das bisherige Salbei.
 - **Goodnotes-Ordner-ZIP** importieren (siehe oben), mit Zusammenlegen, Nummerieren und Bericht.
 - **Sync-Zusammenführung** mit Basis-Stand, Konflikt-Hinweisen und Schutz vor Überschreiben (getestet mit einer

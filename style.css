@@ -274,6 +274,7 @@ svg { display: block; flex: none; }
 .flook-preview { display: flex; justify-content: center; padding: 6px 0 14px; }
 .flook-preview .folder-art { transform: scale(1.15); }
 .flook-label { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 8px; }
+.flook .pal-tabs { padding: 0 0 10px; }
 .flook-colors, .flook-icons { display: flex; flex-wrap: wrap; gap: 10px; }
 .flook-swatch { position: relative; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(15, 39, 71, .15); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-2); overflow: hidden; }
 .flook-swatch.custom { background: conic-gradient(#C9A35B, #6B8F7E, #3E6E9F, #7D6B91, #C9A35B); color: #fff; }
