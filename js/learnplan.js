@@ -177,8 +177,10 @@ export async function renderLearnPlan(content, actions) {
   if (!content.isConnected) return;
   const now = Date.now(), P = planStats(decks, now);
   if (!decks.length) {
+    // the same card stack as a deck in the library, still blank
     return content.replaceChildren(h('div', { class: 'lp' }, h('section', { class: 'dk-empty' },
-      h('div', { class: 'dk-empty-icon' }, icon('cards', 34)),
+      h('div', { class: 'deck-art lp-empty-art', 'aria-hidden': 'true' },
+        h('div', { class: 'deck-card back2' }), h('div', { class: 'deck-card back1' }), h('div', { class: 'deck-card front' })),
       h('h2', {}, 'Noch keine Karteikarten'),
       h('p', {}, 'Hier siehst du später alle Stapel auf einen Blick: was heute dran ist, wie lange es dauert und wie gut du die Karten schon kannst.'),
       h('div', { class: 'dk-empty-btns' },
