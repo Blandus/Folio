@@ -121,16 +121,26 @@ export function icon(name, size = 22) {
   return s;
 }
 
-// Folio mark (same artwork as folio-mark.svg). The front layer and its fold follow the theme
-// via --logo-front / --logo-fold, so the mark stays visible on dark backgrounds.
+// Folio app icon (same artwork as folio-mark.svg, ab v83), with its rounded corners. It brings its own blue ground,
+// so it reads the same in light and dark. Each copy gets its own ids: gradients and the clip path are looked up by id.
+let markSeq = 0;
 export function folioMark(size = 32) {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  s.setAttribute('viewBox', '0 0 64 64');
+  const k = 'fm' + (++markSeq);
+  s.setAttribute('viewBox', '0 0 1024 1024');
   s.setAttribute('width', size); s.setAttribute('height', size);
   s.setAttribute('class', 'folio-mark'); s.setAttribute('aria-hidden', 'true');
-  s.innerHTML = '<rect x="8" y="12" width="28" height="40" rx="6" fill="#8EB8E6" transform="rotate(-20 22 32)"/>'
-    + '<rect x="16" y="11" width="28" height="40" rx="6" fill="#6B8F7E" transform="rotate(-6 30 31)"/>'
-    + '<g transform="rotate(8 40 36)"><path d="M30 14H43L54 25V50a6 6 0 0 1-6 6H30a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z" fill="var(--logo-front, #0F2747)"/>'
-    + '<path d="M43 14V21.5a3.5 3.5 0 0 0 3.5 3.5H54Z" fill="var(--logo-fold, #FAF9F5)"/></g>';
+  s.innerHTML = `<defs><linearGradient id="${k}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4C80B3"/><stop offset="1" stop-color="#335F8C"/></linearGradient>`
+    + `<linearGradient id="${k}p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F1F5F9"/></linearGradient>`
+    + `<clipPath id="${k}r"><rect width="1024" height="1024" rx="229"/></clipPath></defs>`
+    + `<g clip-path="url(#${k}r)"><rect width="1024" height="1024" fill="url(#${k}b)"/>`
+    + '<g transform="translate(512 512) scale(1.08) translate(-512 -520)">'
+    + '<rect x="312" y="260" width="400" height="520" rx="52" fill="#9FC0B0" transform="translate(-74 14) rotate(-19 512 520)"/>'
+    + '<rect x="312" y="260" width="400" height="520" rx="52" fill="#BCD6F2" transform="translate(-34 4) rotate(-8 512 520)"/>'
+    + '<g transform="translate(40 0) rotate(7 512 520)">'
+    + `<path d="M364 260H588L712 384V728a52 52 0 0 1-52 52H364a52 52 0 0 1-52-52V312a52 52 0 0 1 52-52Z" fill="url(#${k}p)"/>`
+    + '<path d="M588 260V340a44 44 0 0 0 44 44H712Z" fill="#CFDDEB"/>'
+    + '<path d="M372 574C408 470 470 456 486 516C502 580 450 630 488 614C528 598 540 492 582 506C616 518 592 586 648 546" stroke="#3E6E9F" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+    + '</g></g></g>';
   return s;
 }
