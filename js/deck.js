@@ -1,6 +1,8 @@
 // Flashcard decks ("Karteikarten"): a document type of its own in the library.
 //   record { kind: 'deck', id, name, parent, …, retention?, newPerDay?,
 //            cards: [{ id, front, back, created, log: [[time, grade]], reset? }] }
+// A deck may belong to a script (script: notebook id) and a card to a page of it (ref) and carry
+// pictures of the script (frontImg / backImg: { src, w, h }), see versions.js.
 // grade 1 = Falsch, 2 = Unpräzise, aber richtig, 3 = Richtig. The schedule is computed from the log
 // (srs.js, FSRS-6), so syncing merges progress by joining the logs (merge.js).
 // Text format for import/export and the AI prompt: cardformat.js.
@@ -12,6 +14,7 @@ import { renderLibrary } from './library.js';
 import { ensureLocal } from './offload.js';
 import { parseCards, cardsToText, AI_PROMPT, renderRich, plainCard } from './cardformat.js';
 import { inkPad, inkView, hasInk } from './inkpad.js';
+import { pickScript } from './versions.js';
 import { AGAIN, HARD, GOOD, stateOf, preview, deckStats, buildQueue, nextCard, fmtIvl, dayEnd, DEFAULT_RETENTION, DEFAULT_NEW_PER_DAY } from './srs.js';
 
 export function newDeck({ name = 'Neue Karteikarten', parent = null, cards = [] } = {}) {
@@ -170,7 +173,8 @@ function renderOverview() {
       const s = st.states.get(c.id) || stateOf(c, opts().retention);
       const [label, cls] = statusOf(s, now);
       return h('button', { class: 'dk-row', onclick: () => editCard(c) },
-        h('span', { class: 'dk-row-text' }, rowSide(c.front, c.frontInk, 'b'), rowSide(c.back, c.backInk, 'span')),
+        h('span', { class: 'dk-row-text' }, rowSide(c.front, c.frontInk, 'b', c.frontImg), rowSide(c.back, c.backInk, 'span', c.backImg)),
+        c.ref && d.script ? h('span', { class: 'dk-page-chip', title: `Seite ${c.ref.n} im Skript` }, `S. ${c.ref.n}`) : null,
         h('span', { class: 'dk-chip ' + cls }, label));
     }), rows.length ? '' : h('div', { class: 'empty' }, q ? 'Keine Treffer.' : ''));
   };
@@ -192,6 +196,7 @@ function renderOverview() {
 
   v.replaceChildren(
     toolbar([
+      d.script ? scriptButton(d.script) : null,
       h('button', { class: 'barbtn', title: 'Neue Karte', 'aria-label': 'Neue Karte', onclick: () => editCard(null) }, icon('plus', 22)),
       h('button', { class: 'barbtn', title: 'Karten importieren', 'aria-label': 'Karten importieren', onclick: () => importCardsSheet({ deck: d }) }, icon('paste', 22)),
       h('button', { class: 'barbtn', title: 'Mehr', 'aria-label': 'Mehr', onclick: e => deckMenu(e.currentTarget) }, icon('dots', 22)),
@@ -206,8 +211,40 @@ function nextDueText(st, now) {
   return `Nächste Wiederholung in ${fmtIvl(next - now)}` + (st.newTotal ? ` · ${st.newTotal} neue Karten warten (Tageslimit erreicht)` : '');
 }
 
+// ---------- Script (versions.js) ----------
+// "Skript-Name": back to the script the deck belongs to
+function scriptButton(id) {
+  const name = h('span', {}, 'Skript');
+  const b = h('button', { class: 'pill-btn script-pill', title: 'Zum Skript', onclick: () => toScript() }, icon('doc', 16), name);
+  store.getMeta(id).then(m => { if (m && !m.deleted && !m.trashed) name.textContent = m.name; else b.hidden = true; }).catch(() => {});
+  return b;
+}
+// Leaves the deck for its script, at the page of ref (a card's page) if given.
+async function toScript(ref) {
+  const id = dk.doc?.script;
+  if (!id) return;
+  let page;
+  if (ref) {
+    const s = await store.get(id);
+    const i = s?.pages?.findIndex(p => p.id === ref.page) ?? -1;
+    page = i >= 0 ? i : Math.min((ref.n || 1) - 1, (s?.pages?.length || 1) - 1);
+  }
+  await saveNow();
+  dk.doc = null; dk.session = null; settings.openDeck = null; saveSettings();
+  view().hidden = true;
+  (await import('./editor.js')).openDoc(id, { page });
+}
+async function assignScript() {
+  const id = await pickScript(dk.doc.script);
+  if (!id) return;
+  dk.doc.script = id; changed(); await saveNow(); renderOverview();
+}
+
 function deckMenu(anchor) {
   menu(anchor, [
+    { label: dk.doc.script ? 'Anderes Skript zuweisen' : 'Skript zuweisen', icon: 'doc', action: assignScript },
+    dk.doc.script && { label: 'Zuweisung aufheben', icon: 'close', action: async () => { dk.doc.script = null; changed(); await saveNow(); renderOverview(); } },
+    '-',
     { label: 'Karten importieren', icon: 'paste', action: () => importCardsSheet({ deck: dk.doc }) },
     { label: 'KI-Prompt kopieren', icon: 'copy', action: copyPrompt },
     { label: 'Als Text exportieren', icon: 'share', action: () => exportDeck(dk.doc) },
@@ -241,13 +278,42 @@ async function resetAll() {
 }
 
 // ---------- Editing a card ----------
-async function editCard(c, mode) {
+// A new card from outside the deck view (an area of a script, versions.js): preset = { frontImg, ref }.
+// deck may not be stored yet (a new deck for the script): it is saved with its first card.
+export async function quickCard(deck, preset) {
+  await editCard(null, null, { deck: dk.doc?.id === deck.id ? dk.doc : deck, preset });
+}
+
+// One side's picture (an area of the script): shown with buttons to move it to the other side or remove it
+function imageBox(img, other, onMove, onRemove) {
+  return h('div', { class: 'dk-img' },
+    h('img', { src: img.src, alt: 'Ausschnitt' }),
+    h('div', { class: 'dk-img-btns' },
+      h('button', { class: 'pill-btn', type: 'button', onclick: onMove }, icon('move', 14), `Auf die ${other}`),
+      h('button', { class: 'pill-btn danger', type: 'button', onclick: onRemove }, icon('trash', 14), 'Entfernen')));
+}
+
+// deck: the deck the card belongs to (the open one unless given); preset: fields of a new card
+async function editCard(c, mode, { deck, preset } = {}) {
+  const D = deck || dk.doc;
   const isNew = !c;
   // Tippen or Schreiben (Apple Pencil, mouse, finger); remembered per device. A card written by
   // hand opens in "Schreiben".
   const anyInk = c && (hasInk(c.frontInk) || hasInk(c.backInk)), anyText = c && (c.front || c.back);
   mode ||= anyInk && !anyText ? 'ink' : anyText ? 'text' : settings.cardInput || 'text';
-  const side = (label, text, ink, placeholder, rows) => {
+  // pictures of the script on either side (frontImg / backImg), movable between the sides
+  const imgs = { frontImg: c?.frontImg || preset?.frontImg, backImg: c?.backImg || preset?.backImg };
+  const slots = { frontImg: h('div', { class: 'dk-img-slot' }), backImg: h('div', { class: 'dk-img-slot' }) };
+  const paintImgs = () => {
+    for (const [k, o, label] of [['frontImg', 'backImg', 'Rückseite'], ['backImg', 'frontImg', 'Vorderseite']]) {
+      slots[k].replaceChildren(imgs[k] ? imageBox(imgs[k], label,
+        () => { [imgs[k], imgs[o]] = [imgs[o], imgs[k]]; paintImgs(); },
+        () => { imgs[k] = null; paintImgs(); }) : '');
+    }
+  };
+  paintImgs();
+  let ref = c?.ref || preset?.ref || null;
+  const side = (label, text, ink, placeholder, rows, key) => {
     const area = h('textarea', { class: 'field dk-area', rows, placeholder });
     area.value = text || '';
     const prev = h('div', { class: 'fc-text dk-preview' });
@@ -261,10 +327,27 @@ async function editCard(c, mode) {
       extra.replaceChildren(...(mode === 'text' && written ? [h('span', { class: 'hint' }, 'Handschrift:'), inkView(written, { maxW: 240, maxH: 70 })] : []));
     };
     area.oninput = show;
-    return { el: [h('div', { class: 'form-label' }, label), area, pad.el, prev, extra], show, area, text: () => area.value.trim(), ink: () => pad.value() };
+    return { el: [h('div', { class: 'form-label' }, label), slots[key], area, pad.el, prev, extra], show, area, text: () => area.value.trim(), ink: () => pad.value(), img: () => imgs[key] };
   };
-  const F = side('Vorderseite', c?.front, c?.frontInk, 'Frage oder Begriff', 3);
-  const B = side('Rückseite', c?.back, c?.backInk, 'Antwort', 4);
+  const F = side('Vorderseite', c?.front, c?.frontInk, 'Frage oder Begriff', 3, 'frontImg');
+  const B = side('Rückseite', c?.back, c?.backInk, 'Antwort', 4, 'backImg');
+  // the page of the script the card belongs to (only with a script, versions.js)
+  const refRow = h('div', { class: 'dk-ref-row' });
+  const paintRef = () => refRow.replaceChildren(
+    h('span', { class: 'hint' }, ref ? `Seite ${ref.n} im Skript` : 'Keine Seite im Skript verknüpft'),
+    h('button', { class: 'pill-btn', type: 'button', onclick: pickRef }, icon('doc', 14), ref ? 'Ändern' : 'Seite verknüpfen'),
+    ref ? h('button', { class: 'pill-btn', type: 'button', onclick: () => { ref = null; paintRef(); } }, 'Entfernen') : '');
+  async function pickRef() {
+    const script = await ensureLocal(await store.getMeta(D.script));
+    if (!script?.pages) return;
+    const v = await promptText('Seite im Skript', String(ref?.n || ''), `1–${script.pages.length}`);
+    const n = Math.round(+v);
+    if (!v) return;
+    if (!(n >= 1 && n <= script.pages.length)) return toast(`Bitte eine Seite von 1 bis ${script.pages.length} eingeben`, 3000);
+    ref = { n, page: script.pages[n - 1].id };
+    paintRef();
+  }
+  if (D.script) paintRef();
   const sides = [F, B];
   const setMode = v => { mode = v; settings.cardInput = v; saveSettings(); sides.forEach(s => s.show()); tip.textContent = TIPS[v]; if (v === 'text' && matchMedia('(hover: hover)').matches) F.area.focus(); };
   const TIPS = {
@@ -278,6 +361,7 @@ async function editCard(c, mode) {
   const body = h('div', { class: 'form dk-edit' },
     h('div', { class: 'dk-mode' }, segmented([['text', 'Tippen'], ['ink', 'Schreiben']], mode, setMode)),
     ...F.el, ...B.el, tip,
+    D.script ? refRow : null,
     s && s.st !== 'new' ? h('div', { class: 'hint' }, `${s.reps} Wiederholung(en), ${s.lapses}× vergessen · nächste ${s.due < Date.now() ? 'jetzt fällig' : 'in ' + fmtIvl(s.due - Date.now())} · Stabilität ${s.s.toFixed(1).replace('.', ',')} Tage`) : null,
     isNew ? h('div', { class: 'dk-edit-btns' },
       h('button', { class: 'pill-btn primary', title: 'Strg+Enter', onclick: e => submit(e, 'next') }, icon('plus', 16), 'Hinzufügen & nächste Karte')) : null,
@@ -288,7 +372,7 @@ async function editCard(c, mode) {
   body.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); action = isNew ? 'next' : null; body.closest('.sheet').querySelector('.sheet-head .textbtn.strong').click(); }
   });
-  const filled = x => x.text() || x.ink();
+  const filled = x => x.text() || x.ink() || x.img();
   const shown = sheet({
     title: isNew ? 'Neue Karte' : 'Karte bearbeiten', body, done: isNew ? 'Hinzufügen' : 'Fertig', className: 'wide',
     onDone: () => (action === 'delete' || (filled(F) && filled(B))) || (toast('Bitte Vorder- und Rückseite ausfüllen – tippen oder schreiben'), false),
@@ -299,17 +383,25 @@ async function editCard(c, mode) {
   if (!ok) return;
   if (c) c = card(c.id) || c; // a sync may have replaced the deck while the sheet was open
   if (action === 'delete') {
-    if (!(await confirmBox('Karte löschen?', plainCard(c.front).slice(0, 80) || 'Handschriftliche Karte', 'Löschen', true))) return;
-    dk.doc.cards = dk.doc.cards.filter(x => x.id !== c.id);
+    if (!(await confirmBox('Karte löschen?', plainCard(c.front).slice(0, 80) || 'Karte ohne Text', 'Löschen', true))) return;
+    D.cards = D.cards.filter(x => x.id !== c.id);
   } else {
-    if (isNew) { c = newCard('', ''); dk.doc.cards.push(c); }
+    if (isNew) { c = newCard('', ''); D.cards.push(c); }
     c.front = F.text(); c.back = B.text();
     for (const [k, x] of [['frontInk', F], ['backInk', B]]) { const ink = x.ink(); if (ink) c[k] = ink; else delete c[k]; }
+    for (const k of ['frontImg', 'backImg']) { if (imgs[k]) c[k] = imgs[k]; else delete c[k]; }
+    if (ref && D.script) c.ref = ref; else delete c.ref;
     if (action === 'reset') c.reset = Date.now();
   }
-  changed(); await saveNow();
-  if (dk.session) renderStudy(); else renderOverview();
-  if (action === 'next') editCard(null, mode);
+  if (D === dk.doc) {
+    changed(); await saveNow();
+    if (dk.session) renderStudy(); else renderOverview();
+  } else { // from a script: the deck is not open
+    D.updated = Date.now();
+    await store.put(D);
+    toast(`Karte zu „${D.name}“ hinzugefügt`);
+  }
+  if (action === 'next') editCard(null, mode, { deck: D });
 }
 
 // ---------- Import ----------
@@ -519,9 +611,12 @@ function renderStudy() {
   const tag = st.st === 'new' ? 'Neu' : st.st === 'review' ? 'Wiederholung' : 'Nochmal';
   const face = h('div', { class: 'fc-card' + (s.flipped ? ' flipped' : ''), role: 'button', tabindex: '0', 'aria-label': s.flipped ? 'Karte' : 'Antwort zeigen', onclick: e => { if (!e.target.closest('a')) flip(); } },
     h('span', { class: 'fc-tag ' + st.st }, tag),
-    sideView(c.front, c.frontInk, 'fc-front', 260),
+    sideView(c.front, c.frontInk, 'fc-front', 260, c.frontImg),
     s.flipped ? h('div', { class: 'fc-sep' }) : null,
-    s.flipped ? sideView(c.back, c.backInk, 'fc-back', 340) : null);
+    s.flipped ? sideView(c.back, c.backInk, 'fc-back', 340, c.backImg) : null,
+    // after turning: to the page of the script this card comes from
+    s.flipped && c.ref && dk.doc.script ? h('button', { class: 'pill-btn fc-ref', onclick: e => { e.stopPropagation(); toScript(c.ref); } },
+      icon('doc', 14), `Im Skript zeigen (Seite ${c.ref.n})`) : null);
   let actions;
   if (!s.flipped) {
     actions = h('div', { class: 'fc-actions' }, h('button', { class: 'fc-show', onclick: flip }, 'Antwort zeigen', h('kbd', {}, 'Leertaste')));
@@ -551,15 +646,17 @@ document.addEventListener('keydown', e => {
 });
 
 
-// One side of a card: its text (formatted) and/or its handwriting
-function sideView(text, ink, cls, maxH) {
+// One side of a card: its picture (from a script), its text (formatted) and/or its handwriting
+function sideView(text, ink, cls, maxH, img) {
   const el = h('div', { class: 'fc-text ' + cls });
+  if (img) el.append(h('img', { class: 'fc-img', src: img.src, alt: 'Ausschnitt aus dem Skript', style: { maxHeight: maxH + 'px' } }));
   if (text) el.append(renderRich(h('div'), text));
   if (hasInk(ink)) el.append(h('div', { class: 'fc-ink' }, inkView(ink, { maxW: Math.min(680, innerWidth - 72), maxH })));
   return el;
 }
-// List row: the text, or a small picture of the handwriting
-function rowSide(text, ink, tag) {
+// List row: the text, or a small picture of the handwriting or of the script
+function rowSide(text, ink, tag, img) {
+  if (!text && img && !hasInk(ink)) return h(tag, { class: 'dk-row-ink' }, h('img', { class: 'dk-row-img', src: img.src, alt: 'Bild' }));
   if (text || !hasInk(ink)) return h(tag, {}, plainCard(text));
   return h(tag, { class: 'dk-row-ink' }, inkView(ink, { maxW: 160, maxH: tag === 'b' ? 30 : 24 }));
 }

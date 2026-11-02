@@ -20,7 +20,7 @@ export const same = (a, b) => stable(a) === stable(b);
 
 const LIST_KEYS = { notebook: 'pages', textdoc: 'blocks', deck: 'cards' };
 const SKIP = new Set(['id', 'kind', 'updated', 'pages', 'blocks', 'cards', 'conflicts']);
-const FIELD_LABEL = { name: 'Name', parent: 'Ordner', cover: 'Cover', color: 'Farbe', icon: 'Symbol', retention: 'Ziel-Behaltensrate', newPerDay: 'Neue Karten pro Tag' };
+const FIELD_LABEL = { name: 'Name', parent: 'Ordner', cover: 'Cover', color: 'Farbe', icon: 'Symbol', retention: 'Ziel-Behaltensrate', newPerDay: 'Neue Karten pro Tag', versionName: 'Name des Durchgangs', script: 'Zugewiesenes Skript' };
 const show = v => (v == null || v === '' ? '–' : v.strokes ? `Handschrift mit ${v.strokes.length} Strich${v.strokes.length === 1 ? '' : 'en'}` : typeof v === 'string' ? `„${v.length > 40 ? v.slice(0, 40) + '…' : v}“` : JSON.stringify(v).slice(0, 40));
 
 // Whether every item carries an id (pages of very old records may not) — otherwise no merge.
@@ -144,7 +144,7 @@ const CARD_PROGRESS = new Set(['id', 'log', 'reset']);
 const cardText = c => Object.fromEntries(Object.entries(c || {}).filter(([k]) => !CARD_PROGRESS.has(k)));
 const cardProgressOnly = (B, X) => same(cardText(B), cardText(X));
 const mergeCard = ctx => (B, L, R) => {
-  const item = { ...mergeFields(B, L, R, ctx, CARD_PROGRESS, { front: 'Die Vorderseite einer Karte', back: 'Die Rückseite einer Karte', frontInk: 'Die Handschrift auf einer Vorderseite', backInk: 'Die Handschrift auf einer Rückseite' }), id: L.id };
+  const item = { ...mergeFields(B, L, R, ctx, CARD_PROGRESS, { front: 'Die Vorderseite einer Karte', back: 'Die Rückseite einer Karte', frontInk: 'Die Handschrift auf einer Vorderseite', backInk: 'Die Handschrift auf einer Rückseite', frontImg: 'Das Bild auf einer Vorderseite', backImg: 'Das Bild auf einer Rückseite', ref: 'Die verknüpfte Skriptseite einer Karte' }), id: L.id };
   const log = unionLog(L.log, R.log);
   if (log.length) item.log = log;
   const reset = Math.max(L.reset || 0, R.reset || 0);

@@ -3,7 +3,7 @@ import { icon, folioMark } from './icons.js';
 import { store, light, settings, saveSettings, bus, newNotebook, newFolder, cloneNotebook, newPage, COVERS, TEMPLATES, TEMPLATE_SECTIONS, PAPERS, FORMATS, PAGE_W, APP_VERSION } from './store.js';
 import { renderCover, renderThumb } from './render.js';
 import { menu, sheet, promptText, confirmBox, toast, segmented, toggle, swipeToDismiss } from './ui.js';
-import { pdfToPages, loadImageFile, exportPdf } from './pdf.js';
+import { pdfToPages, loadImageFile } from './pdf.js';
 import { openDoc } from './editor.js';
 import { suggestNames } from './suggest.js';
 import { sync, signIn, signOut, signedIn } from './sync.js';
@@ -14,6 +14,7 @@ import { renderCalendar, CAL_KINDS } from './calendar.js';
 import { ensureLocal, offload, runOffload, recordSize, offloadOn, offloadMin, OFFLOAD_SIZES, keepFilesLocal, offloadFolder } from './offload.js';
 import { recording, setRecording } from './pencilrec.js';
 import { htrOn, setHtr, htrDocIds } from './htr.js'; // HTR-Beta
+import { parentTile, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickScript } from './versions.js';
 
 const SECTIONS = {
   docs: { label: 'Alle Notizen', icon: 'notes' },
@@ -29,6 +30,7 @@ const lib = {
   section: settings.section || 'docs', folder: null,
   view: settings.view || 'grid', sort: settings.sort || 'date',
   query: '', selecting: false, selected: new Set(), filter: settings.filter || 'all',
+  expanded: new Set(), // tiles showing their versions and decks
 };
 let records = [];
 const root = $('#library');
@@ -95,6 +97,13 @@ const descendants = id => live().filter(r => r.parent === id).flatMap(r => [r, .
 const containsText = (r, q) => r.kind === 'textdoc' ? plainText(r).toLowerCase().includes(q) : r.kind === 'deck' ? deckText(r).toLowerCase().includes(q) : r.kind === 'notebook' && r.pages.some(p => (p.pdfText || '').toLowerCase().includes(q) || p.elements.some(e => e.type === 'text' && e.text.toLowerCase().includes(q)));
 
 const kindOk = r => lib.filter === 'all' || r.kind === lib.filter; // filter tabs
+// Versions and a script's decks are listed under the original's tile (versions.js); with the
+// filter "Karteikarten" the decks stand on their own, since their scripts are not shown then.
+const nested = r => !!parentTile(r, byId) && !(r.kind === 'deck' && lib.filter === 'deck');
+const kidsOf = r => (r.kind === 'notebook' && !r.trashed && !r.versionOf
+  ? [...versionsIn(records, r).slice(1), ...(lib.filter === 'deck' ? [] : decksIn(records, r.id))] : []);
+// a version on its own (in the trash, or its original is gone) carries its version name
+const titleOf = (r, child) => (r.versionOf ? (child ? versionLabel(r) : `${r.name} – ${versionLabel(r)}`) : r.name);
 
 // Search in the text of documents (PDF text, text boxes, text documents): the library only has
 // light records, so the documents are read one at a time in the background; titles match at once.
@@ -118,12 +127,13 @@ function items() {
   let list;
   if (lib.query) {
     const q = lib.query.toLowerCase();
-    list = all.filter(r => !r.trashed && (r.name.toLowerCase().includes(q) || (lib.hits?.q === q.trim() && lib.hits.ids.has(r.id))));
+    // (versions would only repeat their original; decks are found by their cards' text)
+    list = all.filter(r => !r.trashed && !(r.versionOf && nested(r)) && (r.name.toLowerCase().includes(q) || (lib.hits?.q === q.trim() && lib.hits.ids.has(r.id))));
   } else if (lib.section === 'recent') {
-    return all.filter(r => !r.trashed && r.kind !== 'folder' && kindOk(r)).sort((a, b) => (b.opened || b.updated) - (a.opened || a.updated)).slice(0, 30);
+    return all.filter(r => !r.trashed && r.kind !== 'folder' && !nested(r) && kindOk(r)).sort((a, b) => (b.opened || b.updated) - (a.opened || a.updated)).slice(0, 30);
   } else if (lib.section === 'favorites') list = all.filter(r => !r.trashed && r.favorite);
   else if (lib.section === 'trash') list = all.filter(r => r.trashed && !r.trashedBy);
-  else list = all.filter(r => !r.trashed && (r.parent || null) === lib.folder);
+  else list = all.filter(r => !r.trashed && (r.parent || null) === lib.folder && !nested(r));
   const cmp = {
     date: (a, b) => b.updated - a.updated,
     created: (a, b) => (b.created || 0) - (a.created || 0),
@@ -309,7 +319,7 @@ function renderHeaderTitle() { $('#libTitle').textContent = lib.query ? 'Suche' 
 // ---------- Content ----------
 function thumbFor(r, width) {
   if (r.kind === 'folder') {
-    const count = live().filter(x => x.parent === r.id && !x.trashed).length;
+    const count = live().filter(x => x.parent === r.id && !x.trashed && !parentTile(x, byId)).length;
     return folderArt(r, count);
   }
   if (r.kind === 'deck') return deckArt(r, width < 60); // flashcards: a stack of cards, no page preview
@@ -372,7 +382,11 @@ function renderContent() {
   const content = $('#libContent');
   const list = items();
   const wrap = h('div', { class: lib.view === 'grid' ? 'lib-grid' : 'lib-list' });
-  for (const r of list) wrap.append(lib.view === 'grid' ? tile(r) : row(r));
+  for (const r of list) {
+    const kids = lib.section === 'trash' ? [] : kidsOf(r);
+    wrap.append(lib.view === 'grid' ? tile(r, kids) : row(r, kids));
+    if (kids.length && lib.expanded.has(r.id)) for (const k of kids) wrap.append(lib.view === 'grid' ? tile(k, [], true) : row(k, [], true));
+  }
   const empty = !list.length && h('div', { class: 'empty' },
     lib.query ? 'Keine Treffer.' : lib.section === 'trash' ? 'Der Papierkorb ist leer.' : lib.section === 'favorites' ? 'Noch keine Favoriten. Markiere Dokumente über das ···-Menü.' : lib.section === 'recent' ? 'Noch keine Dokumente geöffnet.' : 'Hier ist noch nichts. Tippe oben auf +.');
   // The editable background lets iPadOS offer its real 'Einsetzen' callout on empty space.
@@ -399,36 +413,50 @@ function activate(r) {
   else openDoc(r.id);
 }
 
-// Card: preview on a quiet stone panel, then title, date and the options button
-function tile(r) {
+// "3 Versionen · 1 Stapel": shows or hides the versions and decks under the tile
+function kidsButton(r, kids) {
+  const nv = kids.filter(k => k.kind === 'notebook').length, nd = kids.length - nv;
+  const label = [nv && `${nv + 1} Versionen`, nd && `${nd} Stapel`].filter(Boolean).join(' · ');
+  const open = lib.expanded.has(r.id);
+  return h('button', {
+    class: 'kids-btn' + (open ? ' open' : ''), 'aria-expanded': String(open), title: open ? 'Zuklappen' : 'Aufklappen',
+    onclick: e => { e.stopPropagation(); open ? lib.expanded.delete(r.id) : lib.expanded.add(r.id); renderContent(); },
+  }, icon('chevronRight', 14), h('span', {}, label));
+}
+
+// Card: preview on a quiet stone panel, then title, date and the options button.
+// kids: versions and decks listed under it; child: this is one of those.
+function tile(r, kids = [], child = false) {
   const more = h('button', { class: 'chev', title: 'Optionen', 'aria-label': 'Optionen', onclick: e => { e.stopPropagation(); itemMenu(r, e.currentTarget); } }, icon('dots', 18));
-  const t = h('div', { class: 'tile' + (lib.selected.has(r.id) ? ' selected' : '') + (r.kind === 'folder' ? ' is-folder' : '') },
-    h('button', { class: 'thumb', onclick: () => activate(r), 'aria-label': r.name }, thumbFor(r, 125),
+  const t = h('div', { class: 'tile' + (lib.selected.has(r.id) ? ' selected' : '') + (r.kind === 'folder' ? ' is-folder' : '') + (child ? ' child' : '') },
+    h('button', { class: 'thumb', onclick: () => activate(r), 'aria-label': titleOf(r, child) }, thumbFor(r, 125),
       lib.selecting ? h('span', { class: 'checkmark' }, lib.selected.has(r.id) ? icon('check', 16) : '') : null,
       r.favorite ? h('span', { class: 'fav-badge' }, icon('starFill', 14)) : null,
       r.conflicts?.length ? h('span', { class: 'conflict-badge', title: 'Sync-Hinweis: auf mehreren Geräten geändert' }, '!') : null,
       r.offloaded ? h('span', { class: 'cloud-badge', title: 'Nur in Google Drive – wird beim Öffnen geladen' }, icon('cloud', 15)) : null),
     h('div', { class: 'tile-meta' },
       h('div', { class: 'tile-text' },
-        h('div', { class: 'tile-title' }, h('span', { title: r.name }, r.name)),
-        h('div', { class: 'tile-sub' }, sub(r))),
+        h('div', { class: 'tile-title' }, child ? h('i', { class: 'child-mark' }, icon(r.kind === 'deck' ? 'cards' : 'copy', 13)) : null, h('span', { title: titleOf(r, child) }, titleOf(r, child))),
+        h('div', { class: 'tile-sub' }, sub(r)),
+        kids.length ? kidsButton(r, kids) : null),
       lib.selecting ? null : more));
   if (r.kind === 'folder' && !r.trashed) t.dataset.drop = r.id;
-  dragToFolder(t, r);
+  dragToFolder(t, r, child);
   return t;
 }
 
-function row(r) {
-  const el = h('div', { class: 'row' + (lib.selected.has(r.id) ? ' selected' : '') },
+function row(r, kids = [], child = false) {
+  const el = h('div', { class: 'row' + (lib.selected.has(r.id) ? ' selected' : '') + (child ? ' child' : '') },
     h('button', { class: 'row-hit', onclick: () => activate(r) },
       h('div', { class: 'row-thumb' }, thumbFor(r, 40)),
       h('div', { class: 'row-main' },
-        h('div', { class: 'row-title' }, r.name, r.favorite ? icon('starFill', 12) : '', r.offloaded ? h('span', { class: 'cloud-inline', title: 'Nur in Google Drive' }, icon('cloud', 14)) : '', r.conflicts?.length ? h('span', { class: 'conflict-badge inline', title: 'Sync-Hinweis: auf mehreren Geräten geändert' }, '!') : ''),
+        h('div', { class: 'row-title' }, titleOf(r, child), r.favorite ? icon('starFill', 12) : '', r.offloaded ? h('span', { class: 'cloud-inline', title: 'Nur in Google Drive' }, icon('cloud', 14)) : '', r.conflicts?.length ? h('span', { class: 'conflict-badge inline', title: 'Sync-Hinweis: auf mehreren Geräten geändert' }, '!') : ''),
         h('div', { class: 'row-sub' }, sub(r) + (r.kind === 'notebook' ? ` · ${r.pageCount ?? r.pages.length} ${(r.pageCount ?? r.pages.length) === 1 ? 'Seite' : 'Seiten'}` : r.kind === 'textdoc' ? ' · Textdokument' : r.kind === 'deck' ? ` · ${r.cardCount ?? 0} Karten` : '') + (r.offloaded ? ' · nur in Google Drive' : ''))),
       lib.selecting ? h('span', { class: 'checkmark' }, lib.selected.has(r.id) ? icon('check', 16) : '') : null),
+    kids.length ? kidsButton(r, kids) : null,
     lib.selecting ? null : h('button', { class: 'chev', title: 'Optionen', 'aria-label': 'Optionen', onclick: e => itemMenu(r, e.currentTarget) }, icon('dots', 18)));
   if (r.kind === 'folder' && !r.trashed) el.dataset.drop = r.id;
-  dragToFolder(el, r);
+  dragToFolder(el, r, child);
   return el;
 }
 
@@ -437,21 +465,23 @@ function row(r) {
 // Releasing without dragging opens the item menu (the previous long-press behaviour).
 // Mouse: drag right away; right-click opens the menu.
 const LIFT_MS = 450;
-function dragToFolder(el, r) {
+function dragToFolder(el, r, child = false) {
   el.addEventListener('contextmenu', e => { e.preventDefault(); if (!drag) itemMenu(r, { x: e.clientX, y: e.clientY }); });
   if (r.trashed) return;
   el.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || drag || e.target.closest('.chev')) return;
-    const st = { el, r, id: e.pointerId, x: e.clientX, y: e.clientY, mouse: e.pointerType === 'mouse', lifted: false };
+    if (e.button !== 0 || drag || e.target.closest('.chev, .kids-btn')) return;
+    const st = { el, r, child, id: e.pointerId, x: e.clientX, y: e.clientY, mouse: e.pointerType === 'mouse', lifted: false };
     pending = st;
     if (!st.mouse) st.timer = setTimeout(() => lift(st, st.x, st.y), LIFT_MS);
   });
 }
 
-let pending = null, drag = null, swallowClick = false;
+let pending = null, drag = null, swallowClick = false, menuPointer = null;
 function lift(st, x, y) {
   if (pending !== st) return;
   pending = null;
+  // versions and decks under a tile move with it: a long press only opens their menu
+  if (st.child) { if (!st.mouse) { swallowClick = true; menuPointer = st.id; itemMenu(st.r, { x, y }); } return; }
   st.lifted = true; drag = st;
   navigator.vibrate?.(10);
   // Drag everything selected if the pressed item is part of the selection.
@@ -495,7 +525,7 @@ async function endDrag(cancelled) {
   }
   const folderId = st.target.dataset.drop || null;
   const now = Date.now();
-  await store.putMany(st.ids.map(byId).map(x => Object.assign(x, { parent: folderId, updated: now })));
+  await store.putMany(withVersions(st.ids.map(byId)).map(x => Object.assign(x, { parent: folderId, updated: now })));
   lib.selecting = false; lib.selected.clear();
   toast(`Verschoben nach „${folderId ? byId(folderId).name : 'Dokumente'}“`);
 }
@@ -513,10 +543,12 @@ document.addEventListener('pointermove', e => {
 });
 document.addEventListener('pointerup', e => {
   if (pending && e.pointerId === pending.id) { clearTimeout(pending.timer); pending = null; }
+  if (menuPointer === e.pointerId) { menuPointer = null; setTimeout(() => { swallowClick = false; }, 50); } // the release after a long press opens nothing
   if (drag && e.pointerId === drag.id) endDrag(false);
 });
 document.addEventListener('pointercancel', e => {
   if (pending && e.pointerId === pending.id) { clearTimeout(pending.timer); pending = null; }
+  if (menuPointer === e.pointerId) { menuPointer = null; swallowClick = false; }
   if (drag && e.pointerId === drag.id) endDrag(true);
 });
 // While dragging, stop the page from scrolling under the finger.
@@ -559,9 +591,24 @@ function itemMenu(r, anchor) {
   const nb = r.kind === 'notebook', text = r.kind === 'textdoc', deck = r.kind === 'deck', doc = nb || text || deck;
   // actions that need the content: load it from Drive first if the document is kept only there
   const full = fn => async () => { const d = await ensureLocal(r); if (d) fn(d); };
+  const exportNb = format => () => exportVersions(r, format); // asks which versions when there are several
+  if (r.versionOf && parentTile(r, byId)) { // a version under its original's tile (versions.js)
+    return menu(at, [
+      { label: 'Öffnen', icon: 'doc', action: () => activate(r) },
+      { label: 'Umbenennen', icon: 'rename', action: () => renameVersion(r) },
+      { label: 'Neuer Durchgang …', icon: 'copy', action: () => newVersionOf(r) },
+      { label: 'Exportieren …', icon: 'share', action: () => menu(at, [
+        { label: 'PDF', icon: 'pdf', action: exportNb('pdf') },
+        { label: 'Goodnotes-Datei (Beta)', icon: 'doc', action: exportNb('goodnotes') },
+      ]) },
+      '-',
+      { label: 'In Papierkorb', icon: 'trash', danger: true, action: () => trash([r.id]) },
+    ]);
+  }
   menu(at, [
     doc && { label: 'Öffnen', icon: 'doc', action: () => activate(r) },
     { label: 'Umbenennen', icon: 'rename', action: () => rename(r) },
+    nb && !r.versionOf && { label: 'Neuer Durchgang …', icon: 'copy', action: () => newVersionOf(r) },
     doc && { label: 'Duplizieren', icon: 'copy', action: () => duplicate([r.id]) },
     { label: 'Verschieben', icon: 'move', action: () => moveItems([r.id]) },
     { label: r.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten', icon: r.favorite ? 'starFill' : 'star', action: () => update(r, { favorite: !r.favorite }) },
@@ -573,10 +620,12 @@ function itemMenu(r, anchor) {
     r.conflicts?.length && { label: `Sync-Hinweise (${r.conflicts.length})`, icon: 'sync', action: () => clearConflicts(r) },
     // export formats one level down, like "Importieren …" under "+"
     (nb || text) && { label: 'Exportieren …', icon: 'share', action: () => menu(at, [
-      nb && { label: 'PDF', icon: 'pdf', action: full(d => exportPdf(d)) },
+      nb && { label: 'PDF', icon: 'pdf', action: exportNb('pdf') },
       text && { label: 'PDF (Drucken)', icon: 'pdf', action: full(d => printDoc(d)) },
-      { label: 'Goodnotes-Datei (Beta)', icon: 'doc', action: full(async d => (await import('./goodnotes-export.js')).exportGoodnotes(d)) },
+      { label: 'Goodnotes-Datei (Beta)', icon: 'doc', action: nb ? exportNb('goodnotes') : full(async d => (await import('./goodnotes-export.js')).exportGoodnotes(d)) },
     ]) },
+    deck && { label: r.script ? 'Anderes Skript zuweisen' : 'Skript zuweisen', icon: 'doc', action: () => assignScript(r) },
+    deck && r.script && { label: 'Zuweisung aufheben', icon: 'close', action: () => update(r, { script: null }) },
     deck && { label: 'Karten importieren', icon: 'paste', action: full(d => importCardsSheet({ deck: d })) },
     deck && { label: 'Als Text exportieren', icon: 'share', action: full(d => exportDeck(d)) },
     '-',
@@ -611,8 +660,27 @@ async function rename(r) {
   // a text document's name is its title block
   const title = r.kind === 'textdoc' && doc.blocks?.find(b => b.type === 'title');
   if (title) { title.children = [{ text: name }]; Object.assign(doc, { name, updated: Date.now() }); return store.put(doc); }
-  update(r, { name });
+  await update(r, { name });
+  if (r.kind === 'notebook') renameGroup(r, name); // its versions carry the same name
 }
+
+// ---------- Versions and scripts (versions.js) ----------
+async function renameVersion(r) {
+  const name = await promptText('Durchgang umbenennen', versionLabel(r));
+  if (name) update(r, { versionName: name });
+}
+async function newVersionOf(r) {
+  const v = await askNewVersion(r);
+  if (v) openDoc(v.id);
+}
+async function assignScript(r) {
+  const id = await pickScript(r.script);
+  if (!id) return;
+  await update(r, { script: id });
+  toast(`Liegt jetzt unter „${byId(id)?.name || 'dem Skript'}“`);
+}
+// moving a notebook moves its versions too (they are listed under it)
+const withVersions = rs => rs.flatMap(r => [r, ...(r?.kind === 'notebook' ? live().filter(v => v.versionOf === r.id) : [])]);
 
 async function duplicate(ids) {
   // one document at a time: each copy is loaded, cloned and saved before the next
@@ -626,7 +694,9 @@ async function duplicate(ids) {
       : d.kind === 'textdoc'
       ? { ...structuredClone(d), id: newTextDoc().id, name: d.name + ' Kopie', created: Date.now(), updated: Date.now(), opened: Date.now(), favorite: false }
       : cloneNotebook(d, d.name + ' Kopie');
-    for (const k of ['offloaded', 'remoteUpd', 'size', 'pageCount', 'thumb', 'conflicts', 'light']) delete copy[k];
+    // (a copy is a document of its own, not another version: versions.js)
+    for (const k of ['offloaded', 'remoteUpd', 'size', 'pageCount', 'thumb', 'conflicts', 'light', 'versionOf', 'versionName']) delete copy[k];
+    if (d.versionOf) copy.name = `${d.name} – ${versionLabel(d)}`;
     await store.put(copy); n++;
   }
   if (!n) return toast('Ordner können nicht dupliziert werden');
@@ -658,7 +728,7 @@ async function moveItems(ids) {
   const target = await pickFolder('Verschieben nach', 'Verschieben', { exclude: moving });
   if (target === undefined) return;
   const now = Date.now();
-  await store.putMany(ids.map(byId).map(r => Object.assign(r, { parent: target, updated: now })));
+  await store.putMany(withVersions(ids.map(byId)).map(r => Object.assign(r, { parent: target, updated: now })));
   lib.selecting = false; lib.selected.clear();
   toast('Verschoben');
 }
@@ -669,6 +739,8 @@ async function trash(ids) {
     const r = byId(id);
     recs.push(Object.assign(r, { trashed: now, trashedBy: null, updated: now }));
     for (const d of descendants(id)) if (!d.trashed) recs.push(Object.assign(d, { trashed: now, trashedBy: id, updated: now }));
+    // versions go and come back with their original (decks of a script stay, on their own again)
+    for (const v of live().filter(x => x.versionOf && !x.trashed && recs.some(t => t.id === x.versionOf))) recs.push(Object.assign(v, { trashed: now, trashedBy: id, updated: now }));
   }
   await store.putMany(recs);
   lib.selecting = false; lib.selected.clear();

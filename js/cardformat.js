@@ -116,8 +116,9 @@ export function parseCards(input) {
 export function cardsToText(deck) {
   const out = [`# ${deck.name || 'Karteikarten'}`, ''];
   // handwriting has no text form: such a side is exported as "[Handschrift]"
-  const side = (t, ink) => t || (ink?.strokes?.length ? '[Handschrift]' : '');
-  for (const c of deck.cards || []) out.push('F: ' + side(c.front, c.frontInk), 'A: ' + side(c.back, c.backInk), '');
+  // (and a side with only a picture of the script as "[Bild]")
+  const side = (t, ink, img) => t || (ink?.strokes?.length ? '[Handschrift]' : img ? '[Bild]' : '');
+  for (const c of deck.cards || []) out.push('F: ' + side(c.front, c.frontInk, c.frontImg), 'A: ' + side(c.back, c.backInk, c.backImg), '');
   return out.join('\n');
 }
 
