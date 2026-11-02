@@ -7,6 +7,17 @@ const STAR = 'M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1
 const BOOKMARK = 'M6.5 5.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v15l-5.5-4-5.5 4z';
 const UNDO = '<path d="M9 5L4.5 9.5 9 14"/><path d="M4.5 9.5h10a5 5 0 0 1 0 10H12"/>';
 const PENCIL = '<path d="M16.6 3.9a2 2 0 0 1 2.8 0l.7.7a2 2 0 0 1 0 2.8L8.5 19 4 20l1-4.5z"/><path d="M14.5 6l3.5 3.5"/>';
+// Drawing tools: the tip takes the tool's current colour via --tip (set on the tool button), as in Apple's tool picker;
+// elsewhere --tip is unset and the tip stays empty. The "…Fill" variants show the selected tool; their inner cut lines
+// are always white (in dark mode the toolbar's colour made them black on the tinted fill).
+const PEN_BODY = 'M16.6 3.9a2 2 0 0 1 2.8 0l.7.7a2 2 0 0 1 0 2.8L8.5 19 4 20l1-4.5z';
+// the pen keeps its plain shape; its colour is a short stroke underneath, as with the highlighter
+const PEN_STROKE = '<path d="M3.5 21.6H13" style="stroke:var(--tip,currentColor)" stroke-width="2.6"/>';
+const HL = { body: '<rect x="8" y="2.5" width="8" height="10.5" rx="2"', collar: '<path d="M8 13h8l-1.5 3.5h-5z"', tip: '<path d="M9.5 16.5h5v2l-5 2.5z"' };
+const hl = fill => `<g transform="translate(-.7 0) rotate(45 12 12)">${HL.body}${fill ? ' fill="currentColor"' : ''}/>${HL.collar}${fill ? ' fill="currentColor"' : ''}/>`
+  + `${HL.tip} style="fill:var(--tip,${fill ? 'currentColor' : 'none'})"/>${fill ? '<path d="M8.8 13h6.4" style="stroke:#fff"/>' : ''}</g><path d="M3.5 21H11" style="stroke:var(--tip,currentColor)" stroke-width="2.4"/>`;
+const ERASER = 'M3.9 14.4l9.4-9.4a2 2 0 0 1 2.8 0l3.4 3.4a2 2 0 0 1 0 2.8l-8.2 8.2a2 2 0 0 1-1.4.6H8.6a2 2 0 0 1-1.4-.6l-3.3-3.3a1.2 1.2 0 0 1 0-1.7z';
+const CUT = 'style="stroke:#fff"';
 const dot = (x, y, r = 1.5) => `<circle cx="${x}" cy="${y}" r="${r}" fill="currentColor" stroke="none"/>`;
 const P = {
   library: GRID,
@@ -15,14 +26,27 @@ const P = {
   bookmark: `<path d="${BOOKMARK}"/>`,
   bookmarkFill: `<path d="${BOOKMARK}" fill="currentColor"/>`,
   share: '<path d="M12 3v11.5M8.3 6.7L12 3l3.7 3.7"/><path d="M8 9.5H6.5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H16"/>',
-  pen: PENCIL,
-  eraser: '<path d="M3.9 14.4l9.4-9.4a2 2 0 0 1 2.8 0l3.4 3.4a2 2 0 0 1 0 2.8l-8.2 8.2a2 2 0 0 1-1.4.6H8.6a2 2 0 0 1-1.4-.6l-3.3-3.3a1.2 1.2 0 0 1 0-1.7z"/><path d="M9 9.3l5.7 5.7M13 20h7"/>',
-  highlighter: '<path d="M9 14.5l-4 4v2h4l3.5-2.5"/><path d="M9 14.5l7.3-7.3a1.8 1.8 0 0 1 2.5 0l1 1a1.8 1.8 0 0 1 0 2.5L12.5 18z"/><path d="M14 9.5l3.5 3.5"/>',
+  pen: `<g transform="translate(1.2 -1.6) scale(.88)" stroke-width="1.93"><path d="${PEN_BODY}"/><path d="M14.5 6l3.5 3.5M5 15.5l3.5 3.5"/></g>${PEN_STROKE}`,
+  penFill: `<g transform="translate(1.2 -1.6) scale(.88)" stroke-width="1.93"><path d="${PEN_BODY}" fill="currentColor"/><path d="M14.5 6l3.5 3.5" ${CUT}/></g>${PEN_STROKE}`,
+  eraser: `<path d="${ERASER}"/><path d="M9 9.3l5.7 5.7M13 20h7"/>`,
+  eraserFill: `<path d="${ERASER}" fill="currentColor"/><path d="M9 9.3l5.7 5.7" ${CUT}/><path d="M13 20h7"/>`,
+  // a broad marker with a chisel tip and its stroke underneath (clearly not a second pen)
+  highlighter: hl(false),
+  highlighterFill: hl(true),
   shapes: '<rect x="3.5" y="3.5" width="10" height="10" rx="2.5"/><circle cx="15.5" cy="15.5" r="5"/>',
+  // the white gap is clipped to the square, so the circle's outer edge gets no white ring on a dark toolbar
+  shapesFill: `<defs><clipPath id="shapesFillClip"><rect x="3.5" y="3.5" width="10" height="10" rx="2.5"/></clipPath></defs>`
+    + `<rect x="3.5" y="3.5" width="10" height="10" rx="2.5" fill="currentColor"/>`
+    + `<circle cx="15.5" cy="15.5" r="6.3" fill="#fff" stroke="none" clip-path="url(#shapesFillClip)"/><circle cx="15.5" cy="15.5" r="5" fill="currentColor"/>`,
   lasso: '<path d="M12 4c5 0 8.5 2.4 8.5 5.5S17 15 12 15c-1.2 0-2.4-.2-3.4-.4" stroke-dasharray="2.4 2.6"/><path d="M8.3 14.4C5.3 13.5 3.5 11.7 3.5 9.5 3.5 6.4 7 4 12 4"/><path d="M6.8 14.3c-.9 1.6-.1 3.1 1.3 3.4 1.5.4 1.8 1.7.9 2.8"/>',
   image: '<rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M3.5 17l4.6-4.6a1.4 1.4 0 0 1 2 0l3 3 1.6-1.6a1.4 1.4 0 0 1 2 0l3.8 3.8"/>',
   text: '<path d="M5.5 7.5V5h13v2.5M12 5v14M9.5 19h5"/>',
-  laser: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>',
+  // a glowing point that moves, with speed lines (the old rays read as Apple's brightness symbol,
+  // a ring with a line as a magnifying glass)
+  laser: '<circle cx="15.5" cy="8.5" r="5" fill="currentColor" opacity=".22" stroke="none"/><circle cx="15.5" cy="8.5" r="2.6" fill="currentColor" stroke="none"/><path d="M4 15l5-5M5.5 20.5l7-7M10.5 21l4-4"/>',
+  laserFill: '<circle cx="15.5" cy="8.5" r="5.4" fill="currentColor" opacity=".45" stroke="none"/><circle cx="15.5" cy="8.5" r="3" fill="currentColor" stroke="none"/><path d="M4 15l5-5M5.5 20.5l7-7M10.5 21l4-4"/>',
+  // reading mode: an open book seen from above
+  bookOpen: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5V20"/>',
   undo: UNDO,
   redo: '<path d="M15 5l4.5 4.5L15 14"/><path d="M19.5 9.5h-10a5 5 0 0 0 0 10H12"/>',
   addPage: DOC + '<path d="M12 11.5v6M9 14.5h6"/>',

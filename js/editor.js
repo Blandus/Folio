@@ -698,10 +698,21 @@ export function toggleSearch(open = searchEl.hidden) {
 }
 
 // ---------- Toolbar ----------
-function tb(id, ic, title, onclick, size = 20) { return h('button', { class: 'barbtn', id, title, 'aria-label': title, onclick }, icon(ic, size)); }
+// One symbol size for the whole header (22), as in Apple's toolbars.
+function tb(id, ic, title, onclick, size = 22) { return h('button', { class: 'barbtn', id, title, 'aria-label': title, onclick }, icon(ic, size)); }
+// A tool shows its filled symbol while it is selected (like SF Symbols' .fill), where one exists.
+const FILLED = new Set(['pen', 'highlighter', 'eraser', 'shapes', 'laser']);
+const withClass = (el, c) => (el.setAttribute('class', c), el);
 const toolBtn = ([id, label, ic]) => h('button', {
   class: 'toolbtn', 'data-tool': id, title: label, 'aria-label': label, onclick: () => selectTool(id),
-}, h('span', {}, icon(ic, 22)));
+}, h('span', {}, FILLED.has(ic) ? [withClass(icon(ic, 22), 'ic-line'), withClass(icon(ic + 'Fill', 22), 'ic-fill')] : icon(ic, 22)));
+// The pen and highlighter symbols show the tool's current colour (--tip) as a stroke underneath.
+function syncToolTips() {
+  for (const t of ['pen', 'highlighter']) {
+    const b = document.querySelector(`.toolbtn[data-tool="${t}"]`);
+    if (b) b.style.setProperty('--tip', T[t].colors[T[t].color] || 'currentColor');
+  }
+}
 
 function exportMenu(anchor) {
   menu(anchor, [
@@ -827,6 +838,7 @@ function buildToolbar() {
   // Folio tool row: drawing · content · presentation
   const byTool = Object.fromEntries([...TOOLS, ['lasso', 'Lasso', 'lasso']].map(t => [t[0], t]));
   $('#tbTools').append(...TOOL_GROUPS.flatMap((g, i) => [i ? h('div', { class: 'tool-sep' }) : null, ...g.map(id => toolBtn(byTool[id]))]).filter(Boolean));
+  syncToolTips();
   $('#undoPill').append(
     h('button', { id: 'btnUndo', title: 'Rückgängig (Strg+Z)', 'aria-label': 'Rückgängig', onclick: undo }, icon('undo')),
     h('button', { id: 'btnRedo', title: 'Wiederholen (Strg+Y)', 'aria-label': 'Wiederholen', onclick: redo }, icon('redo')));
@@ -845,7 +857,7 @@ function buildToolbar() {
       if (await showConflicts(doc) && ed.doc === doc) { delete doc.conflicts; changed(); updateChrome(); }
     }),
     Object.assign(tb('btnCards', 'cards', 'Karteikarten zu diesem Skript', e => cardsMenu(e.currentTarget)), { hidden: true }),
-    tb('btnRead', 'book', 'Lesemodus (nur ansehen)', () => setReading(true)),
+    tb('btnRead', 'bookOpen', 'Lesemodus (nur ansehen)', () => setReading(true)),
     tb('btnAdd', 'addPage', 'Seite hinzufügen', e => addPageMenu(e.currentTarget)),
     tb('btnShare', 'share', 'Exportieren', e => exportMenu(e.currentTarget)),
     tb('btnMore', 'moreCircle', 'Mehr', e => menu(e.currentTarget, [
@@ -903,7 +915,7 @@ function updateBookmarkBtn() {
   const on = !!currentPage()?.bookmark;
   if (b._on === on) return; // called on every scroll event: only touch the DOM on a change
   b._on = on;
-  b.replaceChildren(icon(on ? 'bookmarkFill' : 'bookmark', 24));
+  b.replaceChildren(icon(on ? 'bookmarkFill' : 'bookmark', 22));
   b.classList.toggle('on', on);
 }
 export function updateChrome() {
@@ -942,6 +954,10 @@ function colorPopover(anchor, cfg, i) {
   const own = () => (settings.customColors ||= []);
   const set = (c, close) => { cfg.colors[i] = c; cfg.color = i; saveTools(); renderOptions(); recolorSelection(c); if (close) closePopover(); else draw(); };
   const body = h('div', { class: 'colorpop' });
+  // open the palette that holds the current colour, so its swatch is marked (as Apple's colour picker does)
+  const start = (cfg.colors[i] || '').toLowerCase();
+  const holder = Object.keys(PALETTES).find(k => PALETTES[k][1].some(c => c.toLowerCase() === start));
+  if (holder && !PALETTE.some(c => c.toLowerCase() === start)) usePalette(holder);
   const draw = () => {
     const cur = (cfg.colors[i] || '#000000').toLowerCase();
     const sw = c => h('button', { class: 'pal' + (c.toLowerCase() === cur ? ' active' : ''), style: { '--c': c }, title: c.toUpperCase(), onclick: () => set(c, true) });
@@ -955,8 +971,9 @@ function colorPopover(anchor, cfg, i) {
       return b;
     };
     body.replaceChildren(
-      h('div', { class: 'pal-tabs' }, Object.entries(PALETTES).map(([k, [label]]) => h('button', {
-        class: 'chip' + ((settings.palette || 'standard') === k ? ' on' : ''), onclick: () => { usePalette(k); draw(); },
+      h('div', { class: 'segmented pal-tabs', role: 'tablist' }, Object.entries(PALETTES).map(([k, [label]]) => h('button', {
+        class: (settings.palette || 'standard') === k ? 'active' : '', role: 'tab', 'aria-selected': (settings.palette || 'standard') === k ? 'true' : 'false',
+        onclick: () => { usePalette(k); draw(); },
       }, label))),
       h('div', { class: 'palette' }, PALETTE.map(sw)),
       h('div', { class: 'pop-title' }, 'Eigene Farben'),
@@ -988,7 +1005,7 @@ function widthSlots(cfg, max, scale) {
       const format = n => String(Number(n.toFixed(2))).replace('.', ',');
       const update = n => {
         cfg.widths[i] = Math.round(n * MM * 100) / 100;
-        range.value = n;
+        range.value = n; fill();
         saveTools(); renderOptionsKeepPopover();
       };
       const value = h('input', {
@@ -1019,6 +1036,10 @@ function widthSlots(cfg, max, scale) {
           value.setCustomValidity('');
         },
       });
+      // the slider's track is filled up to the value (--v), like the pen sliders
+      const fill = () => range.style.setProperty('--v', (range.value - min) / (maxMM - min) * 100 + '%');
+      range.addEventListener('input', fill);
+      fill();
       popover(e.currentTarget, h('div', { class: 'widthpop' },
         h('div', { class: 'pop-title' }, 'Stärke (mm)'), range, value));
     },
@@ -1034,7 +1055,7 @@ function renderOptionsKeepPopover() {
   });
 }
 
-const chip = (label, on, fn) => h('button', { class: 'chip' + (on ? ' on' : ''), onclick: fn }, label);
+const chip = (label, on, fn) => h('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: fn }, on ? icon('check', 14) : null, label);
 
 function presetsButton(kind) {
   return h('button', {
@@ -1116,13 +1137,12 @@ function penPopover(anchor) {
     input.style.setProperty('--v', Math.round(cfg[key] * 100) + '%');
     return h('div', { class: 'pp-slider' },
       h('div', { class: 'pp-label' }, h('span', {}, label), val),
-      h('div', { class: 'pp-track' }, input, h('div', { class: 'pp-ticks' }, [0, 1, 2, 3, 4].map(() => h('span')))));
+      h('div', { class: 'pp-track' }, input));
   }
 
   function mainPage() {
     wrap.replaceChildren(
-      h('div', { class: 'pp-title' }, PEN_TITLES[cfg.pen]),
-      preview,
+      preview, // no title above: the selected pen type below already names it
       h('div', { class: 'pp-types' }, PENS.map(([k, , ic]) => h('button', {
         class: 'pp-type' + (cfg.pen === k ? ' active' : ''),
         onclick: () => {
@@ -1163,6 +1183,7 @@ function penPopover(anchor) {
 }
 
 export function renderOptions() {
+  syncToolTips(); // every colour change ends here
   const t = ed.tool, cfg = T[t];
   let parts = [];
   if (t === 'pen') {
@@ -1175,7 +1196,7 @@ export function renderOptions() {
     parts = [colorSlots(cfg), sep(), widthSlots(cfg, 50, 0.55), sep(),
       chip('Gerade Linie', cfg.straight, () => { cfg.straight = !cfg.straight; saveTools(); renderOptions(); }), sep(), presetsButton('highlighter')];
   } else if (t === 'shapes') {
-    parts = [colorSlots(cfg), sep(), widthSlots(cfg, 12, 2.6), sep(), h('span', { class: 'opt-hint' }, 'Form zeichnen – wird automatisch geglättet')];
+    parts = [colorSlots(cfg), sep(), widthSlots(cfg, 12, 2.6)];
   } else if (t === 'eraser') {
     parts = [
       optDrop('eraser', cfg.mode === 'precise' ? 'Präzise' : 'Ganzer Strich', [
@@ -1217,8 +1238,7 @@ export function renderOptions() {
       h('button', {
         class: 'opt-drop', title: 'Schriftart', style: { fontFamily: fontFamily(cur) },
         onclick: e => { const p = menu(e.currentTarget, Object.entries(FONTS).map(([k, [label]]) => ({ label, checked: (cur.font || 'sans') === k, action: () => applyTextStyle({ font: k }) }))); keepTextFocus(p.el); },
-      }, h('span', {}, (FONTS[cur.font] || FONTS.sans)[0]), icon('chevronDown', 14)),
-      ed.editing || selText ? null : [sep(), h('span', { class: 'opt-hint' }, 'Auf die Seite tippen, um ein Textfeld zu erstellen')]];
+      }, h('span', {}, (FONTS[cur.font] || FONTS.sans)[0]), icon('chevronDown', 14))];
   } else if (t === 'laser') {
     parts = [colorSlots(cfg), sep(), h('span', { class: 'opt-hint' }, 'Die Spur verschwindet automatisch')];
   } else if (t === 'screenshot') {

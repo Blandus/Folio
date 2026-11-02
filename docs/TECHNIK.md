@@ -839,6 +839,29 @@ Referenz: `design/folio-reference.png`.
   Lizenz erlaubt sie nur in Software für Apple-Plattformen. Überarbeitet wurden u. a. Zahnrad, Ordner, Papierkorb,
   Teilen, Dokument, Seite hinzufügen, Kalender, Stift, Radierer, Textmarker, Bild, Kopieren, Einsetzen, Umbenennen,
   Suche, Uhr, Stern, Lesezeichen, Pfeile; die übrigen folgten schon demselben Stil und wurden nur angeglichen.
+- **Werkzeugleiste des Editors (ab v85):** alle Symbole der Kopfzeile in einer Größe (22 px; `tb()` in `js/editor.js`,
+  vorher 20/22/24 gemischt). Das gewählte Werkzeug zeigt seine **gefüllte** Variante (`penFill`, `highlighterFill`,
+  `eraserFill`, `shapesFill`, `laserFill`; `FILLED` in `editor.js`, Umschalten per CSS `.ic-line`/`.ic-fill`); ihre
+  inneren Trennlinien (Zwinge des Stifts, Band des Radierers, Kappe des Textmarkers, Spalt zwischen Quadrat und Kreis)
+  sind in Hell und Dunkel immer weiß (`CUT` in `js/icons.js`; mit der Leistenfarbe wurden sie im Dunkelmodus schwarz),
+  der Spalt bei den Formen ist auf das Quadrat beschnitten, damit der Kreis außen keinen weißen Ring bekommt; Lasso,
+  Text, Bild und Screenshot haben wie bei Apple keine gefüllte Form. **Stift und Textmarker** zeigen die aktuelle
+  Farbe des Werkzeugs als kurzen Farbstrich unter dem Symbol (`PEN_STROKE` in `js/icons.js`; beim Textmarker
+  zusätzlich die Spitze). Eine eingefärbte Stiftspitze war in 22 px kaum zu sehen, ein eingefärbtes vorderes
+  Drittel sah zusammengestückelt aus — der Betreiber hat den Strich gewählt (`--tip` am Knopf, gesetzt in `syncToolTips()`, das `renderOptions()` bei jedem
+  Farbwechsel aufruft); außerhalb der Leiste bleibt die Spitze leer. Neu gezeichnet: der Textmarker (breiter Marker
+  mit schräger Spitze und Strich darunter, vorher kaum vom Stift zu unterscheiden), der Laserpointer (leuchtender
+  Punkt mit Bewegungsstrichen; die alten Strahlen lasen sich als Apples Helligkeits-Symbol) und der Lesemodus
+  (`bookOpen`, aufgeschlagenes Buch; `book` bleibt als Ordnersymbol). `.barbtn[hidden]` blendet ausgeblendete
+  Kopfzeilen-Knöpfe wirklich aus (der Karteikarten-Knopf war sonst immer sichtbar).
+- **Untermenüs der Werkzeuge (ab v85):** Alle Regler (Stift-Menü `.pp-range`, Strichstärke `.widthpop`) sehen gleich
+  aus wie Apples Regler: dünne Spur, bis zum Wert (`--v`) im Akzent gefüllt, weißer runder Knopf mit weichem
+  Schatten; keine Skalenstriche mehr. Überschriften im Stift-Menü in normaler Schreibweise statt gesperrter
+  Großbuchstaben; der Titel über der Vorschau ist weg (die gewählte Stiftart darunter nennt ihn schon). Ein-/Aus-
+  Kapseln (`chip()` in `editor.js`: Lasso-Filter, „Gerade Linie“) sind aus grau, an hellblau mit Häkchen
+  (`aria-pressed`), statt kräftig gefüllt. Die Farbwahl hat die Paletten als einzeiligen Segmentschalter und öffnet
+  die Palette, in der die aktuelle Farbe liegt, damit ihr Feld markiert ist (das speichert diese Palette als
+  zuletzt gewählte). Die Anleitungssätze bei Formen und Text stehen nicht mehr in der Leiste.
 - **Schrift (ab v72):** Systemschrift (`-apple-system`, also SF auf iPad/Mac, Segoe UI auf Windows): wirkt nativ,
   folgt der Systemeinstellung und lädt nichts von Google. Vorher Inter über Google Fonts. Feste Größenskala
   11 · 12 · 13 · 14 · 15 (Fließtext) · 16 · 17 · 20 · 22 · 28 · 34 px, Gewichte 500/600/700; ausgenommen ist nur der
