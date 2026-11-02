@@ -11,7 +11,7 @@ import { newTextDoc, openTextDoc, renderTextThumb, plainText, printDoc } from '.
 import { newDeck, openDeck, deckArt, deckText, importCardsSheet, exportDeck } from './deck.js';
 import { renderLearnPlan, todayCount } from './learnplan.js';
 import { renderCalendar, CAL_KINDS } from './calendar.js';
-import { ensureLocal, offload, runOffload, recordSize, offloadOn, offloadMin, OFFLOAD_SIZES, keepFilesLocal, offloadFolder } from './offload.js';
+import { ensureLocal, offload, runOffload, recordSize, offloadOn, offloadMin, OFFLOAD_SIZES, keepFilesLocal, offloadFolder, loadFolder } from './offload.js';
 import { recording, setRecording } from './pencilrec.js';
 import { htrOn, setHtr, htrDocIds } from './htr.js'; // HTR-Beta
 import { parentTile, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickScript, pickFrom, attachAsVersion } from './versions.js';
@@ -619,6 +619,7 @@ function itemMenu(r, anchor) {
     nb && { label: 'Cover ändern', icon: 'palette', action: () => changeCover(r) },
     r.kind === 'folder' && { label: 'Farbe & Symbol', icon: 'palette', action: () => changeFolderLook(r) },
     r.kind === 'folder' && signedIn() && { label: 'Ordner nur in Google Drive behalten', icon: 'cloud', action: () => offloadFolderNow(r) },
+    r.kind === 'folder' && signedIn() && { label: 'Ordner auf dieses Gerät laden', icon: 'cloudDown', action: () => loadFolderNow(r) },
     r.conflicts?.length && { label: `Sync-Hinweise (${r.conflicts.length})`, icon: 'sync', action: () => clearConflicts(r) },
     // export formats one level down, like "Importieren …" under "+"
     (nb || text) && { label: 'Exportieren …', icon: 'share', action: () => menu(at, [
@@ -647,7 +648,15 @@ async function offloadFolderNow(r) {
   try { await sync(false); } catch {}
   const { done, kept } = await offloadFolder(r.id);
   const rest = [kept.favorite && `${kept.favorite} ${kept.favorite === 1 ? 'Favorit' : 'Favoriten'}`, kept.open && `${kept.open} geöffnet`, kept.unsynced && `${kept.unsynced} noch nicht synchronisiert`].filter(Boolean).join(', ');
-  toast(done ? `${done === 1 ? '1 Dokument liegt' : `${done} Dokumente liegen`} jetzt nur in Google Drive` + (rest ? ` – geblieben: ${rest}` : '') : rest ? `Nichts verschoben – ${rest}` : 'Der Ordner enthält nichts zum Auslagern', 5000);
+  toast(done ? `${done === 1 ? '1 Dokument liegt' : `${done} Dokumente liegen`} jetzt nur in Google Drive` + (rest ? ` – geblieben: ${rest}` : '') : rest ? `Nichts verschoben – ${rest}` : 'Der Ordner enthält nichts zum Auslagern', done ? 8000 : 5000,
+    done ? { label: 'Rückgängig', run: () => loadFolderNow(r) } : null);
+}
+// the way back: everything in the folder is loaded from Drive onto this device again
+async function loadFolderNow(r) {
+  toast(`„${r.name}“ wird aus Google Drive geladen …`, 0);
+  const { done, failed } = await loadFolder(r.id, (i, n, d) => toast(`Wird geladen: ${i} von ${n} – „${d.name}“`, 0));
+  toast(!done && !failed ? 'Alles in diesem Ordner ist schon auf diesem Gerät'
+    : `${done === 1 ? '1 Dokument ist' : `${done} Dokumente sind`} wieder auf diesem Gerät` + (failed ? ` – ${failed} nicht geladen (Internet? Angemeldet?)` : ''), 5000);
 }
 async function offloadNow(r) {
   if (await offload(r)) toast(`„${r.name}“ liegt jetzt nur in Google Drive (${fmtBytes((await store.getMeta(r.id))?.size || 0)} frei)`, 3500);

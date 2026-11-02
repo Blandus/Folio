@@ -37,6 +37,8 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   Duplikate zusammengeführt: ein leerer Durchgang kann inhaltsgleich mit dem Original sein, die Duplikat-Bereinigung
   hätte ihn sonst gelöscht. Der Umschalter sitzt rechts in der Kopfzeile, weil links neben dem Titel auf dem iPad
   kein Platz ist.
+- **Neue Metadaten-Felder auch in `META` (`js/offload.js`)**: an ausgelagerten Dokumenten überträgt der Sync nur
+  diese Felder; fehlt eines, springt die Änderung beim nächsten Sync zurück (v76: Durchgang-Zuordnung).
 - **Kalender-Feeds sind Nutzereingaben:** private ICS-Adressen nie in Code, Beispieldaten oder Logs.
 - **Design-Regeln (ab v72):** Systemschrift; nur die Schriftgrößen 11 · 12 · 13 · 14 · 15 · 16 · 17 · 20 · 22 · 28 · 34 px
   (Kommentar bei `--font` in `style.css`); Dialoge per Wischen schließbar (`swipeToDismiss` in `js/ui.js`), Schließen
@@ -319,6 +321,16 @@ lädt es sofort. Einzeln: ··· → **Nur in Google Drive behalten** bzw. **Auf
 **Jetzt aufräumen** wendet die Regel sofort an. Umbenennen, Verschieben, Favorit, Papierkorb gehen auch mit der Hülle
 und werden beim Sync auf die Drive-Fassung übertragen (die Hülle selbst wird nie hochgeladen); Änderungen von anderen
 Geräten aktualisieren die Hülle. Duplizieren und Exportieren laden das Dokument vorher.
+Welche Felder einer Hülle übertragen werden, steht in `META` (`js/offload.js`). **Neue Datensatz-Felder, die man an
+einer Hülle ändern kann, dort eintragen** — sonst setzt der nächste Sync sie zurück. So geschehen bis v76 mit
+`versionOf`/`versionName`/`script`: ein als Durchgang zugeordnetes ausgelagertes Dokument sprang wieder zurück.
+Wer davon betroffen war, ordnet es mit v77 einfach noch einmal zu.
+
+**Ganze Ordner:** Ordner → ··· → **Ordner nur in Google Drive behalten** (danach im Hinweis **Rückgängig**) bzw.
+**Ordner auf dieses Gerät laden** (ab v77): lädt alles darin (auch Unterordner) samt Original-PDFs einzeln aus Drive
+zurück und meldet, wie viele nicht geladen werden konnten. Die automatische Regel oben kann große, lange nicht
+geöffnete Dokumente später wieder auslagern; dauerhaft auf dem Gerät bleiben nur Favoriten. Ohne echtes Google
+Drive getestet (Erkennen der ausgelagerten Dokumente im Ordner, Fehlermeldung ohne Anmeldung).
 **Grenzen:** Offline lässt sich eine Hülle nicht öffnen. Die Suche findet bei ausgelagerten Dokumenten nur den Titel,
 nicht den Inhalt. Ohne Drive-Sync wird nichts ausgelagert. Getestet mit einer Drive-Attrappe im Browser (Auslagern
 6,8 MB → 24 KB, Umbenennen, Änderung von anderem Gerät, Öffnen, Favorit), nicht mit dem echten Drive.

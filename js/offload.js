@@ -10,13 +10,15 @@
 // Automatic rule (after a sync, at most once per hour): notebooks and text documents larger than
 // the threshold, not a favourite, not opened in the last 3 days, not open in a tab.
 // Favourites always stay on the device; marking a stub as favourite downloads it.
-import { store, settings, emit } from './store.js';
+import { store, settings, emit, light } from './store.js';
 import { renderThumb } from './render.js';
 import { toast } from './ui.js';
 
 export const CONTENT = { notebook: 'pages', textdoc: 'blocks', deck: 'cards' };
 // fields a stub keeps in sync with the full document (everything except the content)
-export const META = ['name', 'parent', 'favorite', 'trashed', 'trashedBy', 'cover', 'color', 'icon', 'opened', 'conflicts'];
+// (versionOf, versionName, script: versions.js. Missing here, a version made of a stub went back to
+// a document of its own: the sync put only these fields onto the Drive version.)
+export const META = ['name', 'parent', 'favorite', 'trashed', 'trashedBy', 'cover', 'color', 'icon', 'opened', 'conflicts', 'versionOf', 'versionName', 'script'];
 const STUB_ONLY = ['offloaded', 'remoteUpd', 'size', 'pageCount', 'cardCount', 'thumb'];
 const RECENT_MS = 3 * 86400000;
 export const OFFLOAD_SIZES = [2e6, 5e6, 20e6];
@@ -143,10 +145,45 @@ export async function keepFilesLocal(r) {
 // Folder: everything inside it (subfolders too) goes to Drive only, including the original PDFs
 // once they are in Drive. Favourites, documents open in a tab and ones not synced yet stay.
 // Returns { done, kept: { favorite, open, unsynced } }.
-export async function offloadFolder(folderId) {
-  const all = await store.list();
+// ids of a folder and everything inside it (subfolders too)
+function insideFolder(all, folderId) {
   const inside = new Set([folderId]);
   for (let grew = true; grew;) { grew = false; for (const r of all) if (r.parent && inside.has(r.parent) && !inside.has(r.id)) { inside.add(r.id); grew = true; } }
+  return inside;
+}
+// Documents in a folder (subfolders too) that are kept only in Drive, or whose PDF is only there.
+export async function folderInDrive(folderId) {
+  const all = await store.list();
+  const inside = insideFolder(all, folderId);
+  const docs = all.filter(r => r.id !== folderId && inside.has(r.id) && CONTENT[r.kind] && !r.deleted && !r.trashed);
+  const out = [];
+  for (const r of docs) {
+    if (r.offloaded) { out.push(r); continue; }
+    for (const id of r.pdfFiles || []) if (!(await store.getFile(id))?.blob) { out.push(r); break; }
+  }
+  return out;
+}
+// Undoes offloadFolder: everything in the folder comes back to the device, with its original PDFs.
+// Returns { done, failed }. (The automatic rule may later move large, long unopened ones again.)
+export async function loadFolder(folderId, progress = () => {}) {
+  const docs = await folderInDrive(folderId);
+  const res = { done: 0, failed: 0 };
+  for (const [i, r] of docs.entries()) {
+    progress(i + 1, docs.length, r);
+    const full = r.offloaded ? await ensureLocal(r) : r;
+    if (!full) { res.failed++; continue; }
+    const { fetchFileNow } = await import('./pdfdoc.js');
+    let ok = true;
+    for (const id of light(full).pdfFiles || []) { try { await fetchFileNow(id); } catch { ok = false; } }
+    ok ? res.done++ : res.failed++;
+  }
+  if (docs.length) emit('change', null);
+  return res;
+}
+
+export async function offloadFolder(folderId) {
+  const all = await store.list();
+  const inside = insideFolder(all, folderId);
   const res = { done: 0, kept: { favorite: 0, open: 0, unsynced: 0 } };
   for (const r of all) {
     if (r.id === folderId || !inside.has(r.id) || !CONTENT[r.kind] || r.deleted || r.trashed) continue;
