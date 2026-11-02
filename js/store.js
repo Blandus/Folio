@@ -2,7 +2,7 @@ import { uid } from './util.js';
 import { toRadius } from './ink.js';
 
 // Shown in the settings, to check which version a device is running. Raise with each update.
-export const APP_VERSION = '77';
+export const APP_VERSION = '80';
 
 export const PAGE_W = 1000;
 export const FORMATS = { a4: { label: 'A4 Hoch', h: 1414 }, a4l: { label: 'A4 Quer', h: 707 }, letter: { label: 'Letter', h: 1294 } };
@@ -21,7 +21,10 @@ export const COVERS = ['#0F2747', '#3E6E9F', '#8EB8E6', '#6B8F7E', '#4F7A66', '#
 // ---------- Settings (per device) ----------
 export let settings = {};
 try { settings = JSON.parse(localStorage.getItem('settings') || '{}'); } catch {}
-export function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(settings)); } catch {} }
+// afterSave: prefs.js notices changes of the tool row there (to sync them)
+let afterSave = null;
+export const onSettingsSaved = fn => { afterSave = fn; };
+export function saveSettings() { try { localStorage.setItem('settings', JSON.stringify(settings)); } catch {} afterSave?.(); }
 
 // ---------- Change notifications ----------
 export const bus = new EventTarget();
