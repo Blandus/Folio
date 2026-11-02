@@ -29,10 +29,12 @@ export function addPageMenu(anchor, ctx) {
   // "current template": same paper, size and template as this page (a PDF page → blank page of its size)
   const h0 = pageH(cur);
   const curTemplate = (cur?.bg || cur?.pdf) ? 'blank' : cur?.template || 'blank';
+  // then the remaining templates (scroll sideways), same page size and paper colour
+  const paper = (cur?.bg || cur?.pdf) ? undefined : cur?.paper;
   const quick = [
     ['Aktuelle Vorlage', () => newPage(curTemplate, h0, cur?.paper)],
-    ['Leer', () => newPage('blank', h0, (cur?.bg || cur?.pdf) ? undefined : cur?.paper)],
-    ['Liniert schmal', () => newPage('narrow', h0, (cur?.bg || cur?.pdf) ? undefined : cur?.paper)],
+    ...['blank', 'narrow', ...TEMPLATE_SECTIONS.flatMap(([, keys]) => keys).filter(k => k !== 'blank' && k !== 'narrow')]
+      .map(k => [TEMPLATES[k], () => newPage(k, h0, paper)]),
   ];
   const tile = ([label, make]) => {
     const cv = h('canvas'); renderThumb(cv, make(), 200);
