@@ -129,7 +129,8 @@ function items() {
     created: (a, b) => (b.created || 0) - (a.created || 0),
     name: (a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }),
   }[lib.sort];
-  return list.filter(kindOk).sort((a, b) => (a.kind === b.kind ? cmp(a, b) : a.kind === 'folder' ? -1 : 1));
+  // the trash has no filter tabs (few entries), so it always shows everything
+  return (lib.section === 'trash' && !lib.query ? list : list.filter(kindOk)).sort((a, b) => (a.kind === b.kind ? cmp(a, b) : a.kind === 'folder' ? -1 : 1));
 }
 
 export async function renderLibrary() {
@@ -296,7 +297,7 @@ function renderHeader() {
       h('button', { class: 'iconbtn plain', title: 'Auswählen', 'aria-label': 'Auswählen', onclick: () => { lib.selecting = true; renderHeader(); renderContent(); } }, icon('selectCircle', 20)),
     ];
   }
-  const tabs = h('div', { class: 'filter-tabs', role: 'tablist' }, FILTERS.map(([k, label]) => h('button', {
+  const tabs = lib.section === 'trash' && !lib.query ? null : h('div', { class: 'filter-tabs', role: 'tablist' }, FILTERS.map(([k, label]) => h('button', {
     class: 'filter-tab' + (lib.filter === k ? ' on' : ''), role: 'tab', 'aria-selected': lib.filter === k ? 'true' : 'false',
     onclick: () => { lib.filter = k; settings.filter = k; saveSettings(); renderHeader(); renderContent(); },
   }, label)));
@@ -378,7 +379,10 @@ function renderContent() {
   content.classList.add('library-paste-enabled');
   wrap.setAttribute('contenteditable', 'false');
   if (empty) empty.setAttribute('contenteditable', 'false');
-  content.replaceChildren(clipboardArea('library-paste-space', message => pasteSheet(message)), list.length ? wrap : '', empty || '');
+  // Trash: say how long things stay and that sync carries the trash to the other devices.
+  const note = lib.section === 'trash' && list.length && !lib.query && h('p', { class: 'hint trash-note', contenteditable: 'false' },
+    'Dokumente bleiben hier, bis du sie endgültig löschst oder den Papierkorb leerst.' + (signedIn() ? ' Mit Sync gilt das auch auf deinen anderen Geräten.' : ''));
+  content.replaceChildren(clipboardArea('library-paste-space', message => pasteSheet(message)), note || '', list.length ? wrap : '', empty || '');
 }
 
 function activate(r) {
@@ -528,12 +532,18 @@ function newMenu(anchor) {
     { label: 'Karteikarten', icon: 'cards', action: newCardDeck },
     { label: 'Ordner', icon: 'folder', action: createFolder },
     '-',
-    { label: 'PDF importieren', icon: 'pdf', action: importPdf },
-    { label: 'Goodnotes importieren', icon: 'doc', action: importGoodnotes },
-    { label: 'Goodnotes-Ordner (ZIP) importieren', icon: 'folder', action: importGoodnotes },
-    { label: 'PDF/Goodnotes aus Zwischenablage', icon: 'paste', action: importFromClipboard },
-    { label: 'Bild importieren', icon: 'image', action: importImage },
-    { label: 'Karteikarten importieren', icon: 'cards', action: () => importCardsSheet({ parent: lib.section === 'docs' ? lib.folder : null }) },
+    { label: 'Importieren …', icon: 'download', action: () => importMenu(anchor) },
+  ]);
+}
+
+// The imports live one level down so "+" stays about creating. PDF and Goodnotes share one file
+// picker: the content decides (documentKind), as for the clipboard and drag & drop.
+function importMenu(anchor) {
+  menu(anchor, [
+    { label: 'PDF oder Goodnotes (auch ZIP)', icon: 'pdf', action: importDocument },
+    { label: 'Aus der Zwischenablage', icon: 'paste', action: importFromClipboard },
+    { label: 'Bild', icon: 'image', action: importImage },
+    { label: 'Karteikarten', icon: 'cards', action: () => importCardsSheet({ parent: lib.section === 'docs' ? lib.folder : null }) },
   ]);
 }
 
@@ -560,11 +570,14 @@ function itemMenu(r, anchor) {
     r.kind === 'folder' && { label: 'Farbe & Symbol', icon: 'palette', action: () => changeFolderLook(r) },
     r.kind === 'folder' && signedIn() && { label: 'Ordner nur in Google Drive behalten', icon: 'cloud', action: () => offloadFolderNow(r) },
     r.conflicts?.length && { label: `Sync-Hinweise (${r.conflicts.length})`, icon: 'sync', action: () => clearConflicts(r) },
-    nb && { label: 'Als PDF exportieren', icon: 'share', action: full(d => exportPdf(d)) },
-    text && { label: 'Als PDF (Drucken)', icon: 'share', action: full(d => printDoc(d)) },
+    // export formats one level down, like "Importieren …" under "+"
+    (nb || text) && { label: 'Exportieren …', icon: 'share', action: () => menu(at, [
+      nb && { label: 'PDF', icon: 'pdf', action: full(d => exportPdf(d)) },
+      text && { label: 'PDF (Drucken)', icon: 'pdf', action: full(d => printDoc(d)) },
+      { label: 'Goodnotes-Datei (Beta)', icon: 'doc', action: full(async d => (await import('./goodnotes-export.js')).exportGoodnotes(d)) },
+    ]) },
     deck && { label: 'Karten importieren', icon: 'paste', action: full(d => importCardsSheet({ deck: d })) },
     deck && { label: 'Als Text exportieren', icon: 'share', action: full(d => exportDeck(d)) },
-    (nb || text) && { label: 'Als Goodnotes-Datei (Beta)', icon: 'doc', action: full(async d => (await import('./goodnotes-export.js')).exportGoodnotes(d)) },
     '-',
     { label: 'In Papierkorb', icon: 'trash', danger: true, action: () => trash([r.id]) },
   ]);
@@ -581,8 +594,8 @@ async function offloadFolderNow(r) {
   toast('Ordner wird mit Google Drive abgeglichen …', 0);
   try { await sync(false); } catch {}
   const { done, kept } = await offloadFolder(r.id);
-  const rest = [kept.favorite && `${kept.favorite} Favorit(en)`, kept.open && `${kept.open} geöffnet`, kept.unsynced && `${kept.unsynced} noch nicht synchronisiert`].filter(Boolean).join(', ');
-  toast(done ? `${done} Dokument(e) liegen jetzt nur in Google Drive` + (rest ? ` – geblieben: ${rest}` : '') : rest ? `Nichts verschoben – ${rest}` : 'Der Ordner enthält nichts zum Auslagern', 5000);
+  const rest = [kept.favorite && `${kept.favorite} ${kept.favorite === 1 ? 'Favorit' : 'Favoriten'}`, kept.open && `${kept.open} geöffnet`, kept.unsynced && `${kept.unsynced} noch nicht synchronisiert`].filter(Boolean).join(', ');
+  toast(done ? `${done === 1 ? '1 Dokument liegt' : `${done} Dokumente liegen`} jetzt nur in Google Drive` + (rest ? ` – geblieben: ${rest}` : '') : rest ? `Nichts verschoben – ${rest}` : 'Der Ordner enthält nichts zum Auslagern', 5000);
 }
 async function offloadNow(r) {
   if (await offload(r)) toast(`„${r.name}“ liegt jetzt nur in Google Drive (${fmtBytes((await store.getMeta(r.id))?.size || 0)} frei)`, 3500);
@@ -658,13 +671,15 @@ async function trash(ids) {
   }
   await store.putMany(recs);
   lib.selecting = false; lib.selected.clear();
-  toast(ids.length === 1 ? 'In den Papierkorb gelegt' : `${ids.length} Objekte in den Papierkorb gelegt`);
+  toast(ids.length === 1 ? 'In den Papierkorb gelegt' : `${ids.length} Objekte in den Papierkorb gelegt`, 6000,
+    { label: 'Rückgängig', run: () => restore(ids) });
 }
 
 async function restore(ids) {
   const now = Date.now(), recs = [];
   for (const id of ids) {
     const r = byId(id);
+    if (!r?.trashed) continue; // already restored or deleted for good meanwhile
     const parent = byId(r.parent);
     recs.push(Object.assign(r, { trashed: null, updated: now, parent: parent && !parent.trashed ? r.parent : null }));
     for (const d of live().filter(x => x.trashedBy === id)) recs.push(Object.assign(d, { trashed: null, trashedBy: null, updated: now }));
@@ -676,7 +691,8 @@ async function restore(ids) {
 
 async function purge(ids) {
   if (!ids.length) return;
-  if (!await confirmBox(ids.length === 1 ? 'Endgültig löschen?' : `${ids.length} Objekte endgültig löschen?`, 'Das kann nicht rückgängig gemacht werden.', 'Löschen', true)) return;
+  if (!await confirmBox(ids.length === 1 ? `„${byId(ids[0])?.name || 'Unbenannt'}“ endgültig löschen?` : `${ids.length} Objekte endgültig löschen?`,
+    (signedIn() ? 'Auch auf deinen anderen Geräten. ' : '') + 'Das kann nicht rückgängig gemacht werden.', 'Löschen', true)) return;
   const now = Date.now();
   // Tombstones, so the deletion propagates through sync.
   const gone = ids.flatMap(id => [byId(id), ...live().filter(x => x.trashedBy === id)]);
@@ -907,6 +923,14 @@ async function importGoodnotes() {
   importPdfFile(f);
 }
 
+async function importDocument() {
+  // No accept filter, as for Goodnotes: iOS doesn't know the .goodnotes type and would grey the files out.
+  const f = await pickFile('');
+  if (!f) return;
+  if (!(await documentKind(f)) && !/\.goodnotes$/i.test(f.name || '')) return toast('Das ist weder eine PDF noch eine Goodnotes-Datei oder ein Goodnotes-Ordner (ZIP)', 3500);
+  importPdfFile(f);
+}
+
 // .goodnotes files are ZIP archives ("PK")
 export async function isGoodnotes(file) {
   if (/\.goodnotes$/i.test(file.name || '')) return true;
@@ -977,7 +1001,7 @@ async function importGoodnotesFolder(file, zip) {
   const clashes = roots.filter(n => existingFolder(n, parent));
   let mode = 'merge';
   const summary = h('div', { class: 'form' },
-    h('p', { class: 'cal-hint' }, `${docs.length} Dokument${docs.length === 1 ? '' : 'e'} in ${paths.length} Ordner${paths.length === 1 ? '' : 'n'}${skipped.length ? `, ${skipped.length} andere Datei(en) werden übersprungen` : ''}.`),
+    h('p', { class: 'cal-hint' }, `${docs.length} Dokument${docs.length === 1 ? '' : 'e'} in ${paths.length} Ordner${paths.length === 1 ? '' : 'n'}${skipped.length ? `, ${skipped.length === 1 ? '1 andere Datei wird' : `${skipped.length} andere Dateien werden`} übersprungen` : ''}.`),
     clashes.length ? h('div', {},
       h('p', { class: 'cal-hint' }, `Am Ziel gibt es schon: ${clashes.map(n => `„${n}“`).join(', ')}.`),
       segmented([['merge', 'Zusammenlegen'], ['new', 'Neuer Ordner']], mode, v => { mode = v; }),
@@ -1030,7 +1054,7 @@ async function importGoodnotesFolder(file, zip) {
     await sheet({
       title: 'Import-Bericht', done: 'OK', cancel: false,
       body: h('div', { class: 'form' },
-        h('p', { class: 'cal-hint' }, `${docs.length - failed.length} Dokument(e) importiert, ${made.length} Ordner angelegt.`),
+        h('p', { class: 'cal-hint' }, `${docs.length - failed.length} Dokument${docs.length - failed.length === 1 ? '' : 'e'} importiert, ${made.length} Ordner angelegt.`),
         ...list('Umbenannt (Name gab es schon)', renamed),
         ...list('Fehlgeschlagen', failed.map(([k, m]) => `${k}: ${m}`)),
         ...list('Übersprungen', skipped.map(([k, m]) => `${k} (${m})`))),
@@ -1264,12 +1288,12 @@ function storageBox() {
       row('Notizen und Dokumente', fmtBytes(docBytes), `(${docs.filter(r => r.kind !== 'folder').length})`),
       pdfLocal ? row('Original-PDFs', fmtBytes(pdfLocal), `(${pdfN} Datei${pdfN === 1 ? '' : 'en'})`) : null,
       pdfDrive ? row('PDFs nur in Google Drive', fmtBytes(pdfDrive), '(hier nicht belegt)') : null,
-      baseBytes ? row('Sync-Abgleichstand', fmtBytes(baseBytes)) : null,
+      baseBytes ? row('Sync-Vergleichskopie', fmtBytes(baseBytes)) : null,
       calBytes ? row('Kalender', fmtBytes(calBytes)) : null,
       appBytes ? row('App (offline)', fmtBytes(appBytes)) : null,
       biggest.length ? h('div', { class: 'form-label' }, 'Größte Dokumente') : null,
       ...biggest.map(([r, n]) => row(r.name, fmtBytes(n))),
-      h('div', { class: 'hint' }, 'Der Gesamtwert ist eine Schätzung des Browsers (Safari rundet, manche Browser komprimieren); die Einzelwerte sind die Größe der gespeicherten Daten. Importierte PDFs brauchen am meisten Platz, weil ihre Seiten als Bilder gespeichert werden. Der Sync-Abgleichstand ist die lokale Kopie für das Zusammenführen zwischen Geräten.'),
+      h('div', { class: 'hint' }, '„Belegt auf diesem Gerät“ schätzt der Browser (Safari rundet, manche Browser komprimieren); die Zeilen darunter sind die Größe der gespeicherten Daten. Importierte PDFs brauchen meist am meisten Platz, weil Folio die Original-Datei aufbewahrt. Die Sync-Vergleichskopie ist der zuletzt mit Google Drive abgeglichene Stand; mit ihr führt Folio Änderungen von mehreren Geräten zusammen.'),
     ].filter(Boolean)); // replaceChildren would turn null into the text "null"
   })();
   return box;
@@ -1289,7 +1313,7 @@ function offloadBox() {
     signedIn() && offloadOn() ? h('button', { class: 'pill-btn', onclick: async e => {
       e.currentTarget.disabled = true;
       const n = await runOffload({ force: true });
-      toast(n ? `${n} Dokument(e) liegen jetzt nur in Google Drive` : 'Nichts zum Auslagern (zu klein, Favorit, kürzlich geöffnet oder noch nicht synchronisiert)', 4000);
+      toast(n ? `${n === 1 ? '1 Dokument liegt' : `${n} Dokumente liegen`} jetzt nur in Google Drive` : 'Nichts zum Auslagern (zu klein, Favorit, kürzlich geöffnet oder noch nicht synchronisiert)', 4000);
       e.currentTarget.disabled = false;
     } }, icon('cloud', 16), 'Jetzt aufräumen') : null);
 }
@@ -1311,12 +1335,7 @@ export async function openSettings() {
     h('div', { class: 'form-label' }, 'Stift'),
     h('div', { class: 'group-box' },
       toggle('Nur mit Stift zeichnen', !settings.fingerDraw, v => { settings.fingerDraw = !v; saveSettings(); }),
-      h('div', { class: 'hint' }, 'An: Finger scrollen und zoomen, nur der Apple Pencil zeichnet.'),
-      // HTR-Beta
-      toggle('Handschrift erkennen (Beta)', htrOn(), v => setHtr(v)),
-      h('div', { class: 'hint' }, 'Liest deine Handschrift im Hintergrund, damit die Suche handschriftliche Begriffe findet. Läuft komplett auf diesem Gerät (Modell DE·HTR, einmalig ca. 20 MB), nie beim Schreiben. Der erkannte Text bleibt auf dem Gerät; die Dokumente werden nicht verändert.'),
-      toggle('Pencil-Aufzeichnung (Diagnose)', recording(), v => setRecording(v)),
-      h('div', { class: 'hint' }, 'Zeichnet die Rohdaten deiner Stiftstriche auf (Positionen, Druck, Neigung, Zeiten), damit die Handschrift am Computer nachgestellt und mit Goodnotes verglichen werden kann. Unten erscheint eine Leiste: Testsatz schreiben, dann „Sichern“ → Datei teilen oder in Dateien sichern. Bleibt nur auf diesem Gerät, bis du sie teilst.')),
+      h('div', { class: 'hint' }, 'An: Finger scrollen und zoomen, nur der Apple Pencil zeichnet.')),
     h('div', { class: 'form-label' }, 'Synchronisation'),
     account,
     h('div', { class: 'group-box', style: { marginTop: '10px' } },
@@ -1325,7 +1344,16 @@ export async function openSettings() {
     h('div', { class: 'form-label' }, 'Speicher'),
     offloadBox(),
     storageBox(),
+    // Beta and diagnostics: rarely needed, so folded away at the end (open while a recording runs)
+    h('details', { class: 'settings-more', open: recording() },
+      h('summary', { class: 'form-label' }, 'Erweitert'),
+      h('div', { class: 'group-box' },
+      toggle('Handschrift erkennen (Beta)', htrOn(), v => setHtr(v)),
+      h('div', { class: 'hint' }, 'Liest deine Handschrift im Hintergrund, damit die Suche auch handgeschriebene Wörter findet. Läuft nur auf diesem Gerät und nie, während du schreibst; beim ersten Einschalten lädt Folio dafür einmalig ca. 20 MB. Der erkannte Text bleibt auf dem Gerät, deine Dokumente bleiben unverändert.'),
+      toggle('Pencil-Aufzeichnung (Diagnose)', recording(), v => setRecording(v)),
+      h('div', { class: 'hint' }, 'Zum Verbessern der Handschrift: Folio speichert, wie du schreibst (Position, Druck, Neigung und Zeitpunkt jedes Stiftpunkts), damit sich deine Striche am Computer nachstellen und mit Goodnotes vergleichen lassen. Unten erscheint eine Leiste: Testsatz schreiben, dann „Sichern“ und die Datei teilen oder in „Dateien“ sichern. Die Aufzeichnung bleibt auf diesem Gerät, bis du sie teilst.'))),
     h('div', { class: 'about' }, folioMark(40), h('div', {}, h('div', { class: 'about-name' }, 'Folio'), h('div', { class: 'hint' }, `Make space for ideas. · Version ${APP_VERSION} · `, h('a', { href: 'datenschutz.html', target: '_blank', rel: 'noopener' }, 'Datenschutz')))));
-  const ok = await sheet({ title: 'Einstellungen', body });
-  if (ok) renderSidebar();
+  // Every switch takes effect at once, so there is nothing to cancel: only "Fertig".
+  await sheet({ title: 'Einstellungen', body, cancel: false });
+  renderSidebar();
 }

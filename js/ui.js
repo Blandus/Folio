@@ -2,13 +2,17 @@ import { h, clamp } from './util.js';
 import { icon } from './icons.js';
 
 // ---------- Toast ----------
+// action: { label, run } adds a button (e.g. "Rückgängig"); a newer toast replaces it.
 let toastT;
-export function toast(msg, ms = 2400) {
+export function toast(msg, ms = 2400, action = null) {
   let t = document.getElementById('toast');
   if (!t) { t = h('div', { id: 'toast', role: 'status' }); document.body.append(t); }
-  t.textContent = msg; t.classList.add('show');
+  const hide = () => t.classList.remove('show');
+  t.replaceChildren(h('span', {}, msg), action ? h('button', { class: 'toast-action', onclick: () => { hide(); action.run(); } }, action.label) : '');
+  t.classList.toggle('has-action', !!action);
+  t.classList.add('show');
   clearTimeout(toastT);
-  if (ms) toastT = setTimeout(() => t.classList.remove('show'), ms);
+  if (ms) toastT = setTimeout(hide, ms);
 }
 
 // ---------- Popovers & menus ----------

@@ -28,6 +28,23 @@ async function fetchRecord(id) {
 
 function setStatus(msg) { settings.syncStatus = msg; emit('sync', msg); }
 
+// Plain words for the sidebar instead of "Drive 503" or "Failed to fetch". A tap on a warning shows
+// it in full and syncs again (library.js), so each message says what that tap or waiting will do.
+function syncError(err) {
+  const m = String(err?.message || err || '');
+  if (!navigator.onLine || /failed to fetch|load failed|networkerror|offline/i.test(m))
+    return 'Offline – deine Änderungen bleiben auf dem Gerät und werden synchronisiert, sobald du wieder online bist';
+  const code = +(m.match(/^Drive(?:-Upload)? (\d{3})$/) || [])[1];
+  if (code === 401) return 'Google-Anmeldung abgelaufen – tippen, um neu zu verbinden';
+  if (code === 403) return 'Google Drive verweigert gerade den Zugriff (Speicher voll oder zu viele Anfragen) – tippen, um es erneut zu versuchen';
+  if (code === 429 || code >= 500) return 'Google Drive antwortet gerade nicht – Folio versucht es in Kürze erneut';
+  if (code) return `Google Drive meldet einen Fehler (${code}) – tippen, um es erneut zu versuchen`;
+  // Google sign-in window (error types per Google Identity Services: popup_closed, popup_failed_to_open)
+  if (/popup_closed|access_denied/.test(m)) return 'Anmeldung abgebrochen – tippen, um es erneut zu versuchen';
+  if (/popup_failed_to_open/.test(m)) return 'Das Google-Anmeldefenster wurde blockiert – Pop-ups für Folio erlauben und erneut tippen';
+  return m;
+}
+
 // ---------- Sign-in ----------
 // One OAuth client for everyone: it only identifies the app (allowed origin: the GitHub Pages
 // site). Each person signs in with their own Google account and Folio gets a token for *their*
@@ -67,7 +84,7 @@ export async function signIn() {
     settings.account = { email: about.user?.emailAddress || '', name: about.user?.displayName || '' };
     saveSettings(); emit('account');
     await sync(false);
-  } catch (err) { setStatus('⚠ Anmeldung: ' + err.message); }
+  } catch (err) { setStatus('⚠ ' + syncError(err)); }
 }
 export function signOut() {
   if (drive.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(drive.token, () => {});
@@ -432,16 +449,17 @@ export async function sync(interactive) {
     let gnNote = '';
     if (settings.gnCopies !== false) {
       setStatus('Goodnotes-Kopien…');
-      try { const n = await syncGoodnotesCopies(folders, local); if (n) gnNote = ` · ${n} Goodnotes-Kopie(n)`; }
-      catch (err) { gnNote = ' · ⚠ Goodnotes-Kopie: ' + err.message; }
+      try { const n = await syncGoodnotesCopies(folders, local); if (n) gnNote = ` · ${n} Goodnotes-${n === 1 ? 'Kopie' : 'Kopien'}`; }
+      catch (err) { gnNote = ' · ⚠ Goodnotes-Kopien: ' + syncError(err); }
     }
     const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    const fixed = merged.length ? ` · ${merged.filter(r => r.deleted).length} Duplikat(e) zusammengeführt` : '';
-    const mergeNote = mergedN ? ` · ${mergedN} zusammengeführt${conflictN ? `, ${conflictN} Konflikt-Hinweis(e)` : ''}` : '';
+    const dupN = merged.filter(r => r.deleted).length;
+    const fixed = merged.length ? ` · ${dupN} ${dupN === 1 ? 'Duplikat' : 'Duplikate'} zusammengeführt` : '';
+    const mergeNote = mergedN ? ` · ${mergedN} zusammengeführt${conflictN ? `, ${conflictN} ${conflictN === 1 ? 'Konflikt-Hinweis' : 'Konflikt-Hinweise'}` : ''}` : '';
     setStatus(`Synchronisiert ${time}${up || down ? ` · ↑${up} ↓${down}` : ''}${mergeNote}${fixed}${offNote}${gnNote}`);
     if (conflictN) emit('conflicts', conflictN);
   } catch (err) {
-    setStatus('⚠ ' + err.message);
+    setStatus('⚠ ' + syncError(err));
   } finally {
     drive.busy = false;
   }

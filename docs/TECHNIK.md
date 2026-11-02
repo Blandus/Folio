@@ -182,7 +182,7 @@ den Hinweis). Striche bleiben Vektordaten (`points` = [x, y, Radius] plus Farbe,
 - Safari liefert erst ab 26.2 Pointer-Koordinaten mit Nachkommastellen (vorher ganze Pixel); bei älteren
   iPadOS-Versionen sind Längsstriche deshalb zwangsläufig leicht stufig.
 
-**v57 – Pencil-Aufzeichnung (Diagnose):** Einstellungen → Stift → „Pencil-Aufzeichnung (Diagnose)“. Solange
+**v57 – Pencil-Aufzeichnung (Diagnose):** Einstellungen → Erweitert → „Pencil-Aufzeichnung (Diagnose)“. Solange
 sie an ist, speichert `js/pencilrec.js` für jeden Stiftstrich die Rohdaten: jedes Pointer-Event mit seinen
 Zwischenpunkten (`getCoalescedEvents`) und Vorhersagen (`getPredictedEvents`), Position, Druck, Neigung und
 Zeitstempel, dazu Folios Bearbeitungszeit pro Event, die Frame-Zeiten des Displays (60 oder 120 Hz), Zoom und
@@ -240,7 +240,7 @@ Frame beurteilen, nicht nur nach mittlerem Abstand.
   Schalter wieder *an* sofort mit 60 fps. Dort also eingeschaltet lassen (Standard).
 
 ## Handschrifterkennung (Beta, ab v70)
-Einstellungen → Stift → **„Handschrift erkennen (Beta)“** (standardmäßig aus). Folio liest die Handschrift im
+Einstellungen → Erweitert → **„Handschrift erkennen (Beta)“** (standardmäßig aus). Folio liest die Handschrift im
 Hintergrund, und die Suche im Dokument (Lupe) sowie die Bibliothekssuche finden handschriftliche Begriffe; ein Treffer
 markiert die Zeile mit dem Lasso.
 - **Modell:** DE·HTR v2 (huggingface.co/naeyn/de-htr-web-v2, Apache-2.0, Revision `6241c1f…`), deutsche
@@ -303,7 +303,7 @@ sehr große davon am besten löschen und die PDF neu importieren.
 ## Speicher sparen: große Dokumente nur in Google Drive
 ⚙ → **Speicher** → **Große Dokumente nur in Google Drive** (Standard: an, ab 5 MB; wählbar 2 / 5 / 20 MB). Gilt nur
 mit Drive-Sync. Nach einem Sync (höchstens einmal pro Stunde) ersetzt Folio Notizbücher und Textdokumente, die
-- größer als die Grenze sind (typisch: importierte Literatur-PDFs, deren Seiten als Bilder gespeichert sind),
+- größer als die Grenze sind (typisch: importierte Literatur-PDFs),
 - **kein Favorit** sind,
 - seit 3 Tagen nicht geöffnet wurden, nicht in einem Tab offen sind,
 - und deren neueste Fassung schon in Drive liegt,
@@ -365,7 +365,7 @@ IndexedDB, wird nie hochgeladen). Beim Sync:
 4. Folio erkennt die Datei und fragt nach dem Zielordner.
 
 Die freie Fläche ist ein echter Einfügebereich für das iPad-Systemmenü; Dokumentkarten bleiben normal bedienbar.
-Alternativ: **+ → PDF/Goodnotes aus Zwischenablage** öffnet einen Einfügebereich mit einem **Einsetzen**-Knopf.
+Alternativ: **+ → Importieren … → Aus der Zwischenablage** öffnet einen Einfügebereich mit einem **Einsetzen**-Knopf.
 Am PC funktioniert dort auch Strg+V bzw. Cmd+V.
 
 **Grenze von Safari:** iPadOS gibt nicht jede kopierte Datei an Webseiten weiter. Ein kopierter Dateiverweis,
@@ -389,7 +389,7 @@ Button **PDF/Goodnotes einsetzen**. Ohne Einfügevorgang bzw. Knopfdruck wird di
 PDFs und Goodnotes-Dateien können weiterhin über Dateiauswahl oder Drag & Drop importiert werden.
 
 ## Goodnotes-Dateien importieren (.goodnotes)
-In Goodnotes: **Teilen → Exportieren → Goodnotes** → Datei in „Dateien“ sichern. In Folio: **+ → Goodnotes importieren**
+In Goodnotes: **Teilen → Exportieren → Goodnotes** → Datei in „Dateien“ sichern. In Folio: **+ → Importieren … → PDF oder Goodnotes**
 (oder die Datei per Drag & Drop in die App ziehen) → Ordner wählen.
 Übernommen werden: Seitenreihenfolge, PDF-Hintergründe und Papiervorlagen, Handschrift (Farbe, Stärke, Druck),
 Formen und farbige Linien, eingefügte Bilder (PNG/JPEG, an Originalposition und -größe), Textfelder (Text, Farbe,
@@ -398,8 +398,8 @@ weggelassen. Alles ist danach normal bearbeitbar (radieren, Lasso, umfärben, ve
 Noch nicht unterstützt: gedrehte/zugeschnittene Bilder (kamen in der Beispieldatei nicht vor).
 
 ### Ganze Goodnotes-Ordner (ZIP)
-In Goodnotes einen **Ordner** exportieren → ZIP in „Dateien“ sichern → in Folio **+ → Goodnotes-Ordner (ZIP)
-importieren** (oder per Drag & Drop) und die ZIP wählen. **PDFs in der ZIP** werden ebenfalls importiert (als
+In Goodnotes einen **Ordner** exportieren → ZIP in „Dateien“ sichern → in Folio **+ → Importieren … → PDF oder
+Goodnotes** (oder per Drag & Drop) und die ZIP wählen. **PDFs in der ZIP** werden ebenfalls importiert (als
 Notizbuch mit PDF-Hintergrund) — damit geht auch jeder normal gezippte Ordner voller PDFs, auch mit Windows-Bordmitteln
 gezippt. Folio erkennt den Ordner-Export (Einträge `Ordner/Unterordner/Name.goodnotes`
 plus `.goodnotesmeta`) und baut die **Ordnerstruktur als echte Folio-Ordner** nach (Ordnerfarbe aus Goodnotes wird
@@ -445,7 +445,7 @@ Tabellen, Bild): öffnet sich. Achtung: Auf einem Übertragungsweg meldete Goodn
 Datei „Dateiformat wird nicht unterstützt“ — dann einen anderen Weg probieren (per Discord ging es).
 
 ## Karteikarten (ab v66)
-**+ → Karteikarten** legt einen leeren Stapel an, **+ → Karteikarten importieren** einen Stapel aus Text.
+**+ → Karteikarten** legt einen leeren Stapel an, **+ → Importieren … → Karteikarten** einen Stapel aus Text.
 Stapel sind ein eigener Dokumenttyp: Ordner, Favoriten, Papierkorb, Suche (auch im Kartentext), Duplizieren,
 Filter „Karteikarten“ und Google-Drive-Sync wie bei Notizbüchern. Die Kachel zeigt, wie viele Karten heute dran sind.
 
@@ -645,6 +645,32 @@ Referenz: `design/folio-reference.png`.
   Präsentation (Laser, Screenshot) · rechts Seite hinzufügen, Exportieren, Mehr. Rückgängig/Wiederholen schweben
   oben links über der Seite (`#undoPill`); die Einstellungen des aktiven Werkzeugs in einer eigenen, andockbaren
   Detailleiste.
+- **Texte:** Hinweise beschreiben, was passiert und was der Nutzer tun kann, ohne interne Begriffe (kein Modellname,
+  keine „Rohdaten“). Begriffe: **Sync-Vergleichskopie** (früher „Sync-Abgleichstand“) = der zuletzt mit Drive
+  abgeglichene Stand im Speicher `bases`. Mengen werden ausgeschrieben („1 Dokument“ / „3 Dokumente“), nicht
+  „Dokument(e)“. Der Papierkorb hat keine automatische Leerung: Ein Hinweis über den Einträgen sagt das (mit Sync: gilt
+  auf allen Geräten). Endgültiges Löschen nennt den Namen des Objekts und, mit Sync, dass es auch auf den anderen
+  Geräten verschwindet. Der Speicherhinweis sagt, dass importierte PDFs als Original-Datei Platz brauchen (seit v50
+  keine Seitenbilder mehr).
+- **Kontrast:** Text erreicht überall mindestens 4,5:1 (WCAG AA). `--text-2` ist im Hellen `rgba(15,39,71,.68)`
+  (≥ 4,9:1 auch auf `--surface-3`), im Dunklen bleibt `.62` (≥ 5,1:1). `--text-3` ist **nur für Nicht-Text**
+  (Ränder, Griffpunkte, Skalenstriche, Trenner) und erreicht dafür 3:1 (hell `.5`, dunkel `.45`). Kleine
+  Beschriftungen wie Seitenleisten-Label, Such-Platzhalter, Kalenderstunden und `.fc-tag` nutzen `--text-2`; in der
+  Lernvorschau sind Wochentage `--text` und Wochenenden `--text-2`.
+- **Absicherung:** „In den Papierkorb“ zeigt 6 s lang einen Toast mit **Rückgängig** (`toast(msg, ms, {label, run})`
+  in `js/ui.js`; nur Toasts mit Aktion nehmen Klicks an, alle anderen bleiben `pointer-events: none`). Im Mehr-Menü
+  des Editors steht „Seite löschen“ durch einen Trenner von „Seite leeren“ getrennt, wie im Seitenmenü. Die
+  Einstellungen haben nur „Fertig“ (alle Schalter wirken sofort; Wischen, Esc und Tippen daneben schließen ebenso).
+  Sync-Fehler erscheinen in der Seitenleiste in Klartext (`syncError()` in `js/sync.js`): offline, Anmeldung
+  abgelaufen (401), Zugriff verweigert (403), Drive antwortet nicht (429/5xx), Anmeldung abgebrochen oder
+  Anmeldefenster blockiert (Fehlertypen von Google Identity Services). Ungetestet mit dem echten Drive.
+- **Menüs schlank:** „+“ ist zum Anlegen da (Notizbuch, Schnellnotiz, Textdokument, Karteikarten, Ordner) plus ein
+  **Importieren …**, das ein zweites Menü öffnet: PDF oder Goodnotes (eine Dateiauswahl ohne Typfilter; der Inhalt
+  entscheidet über `documentKind()`, auch für Goodnotes-Ordner als ZIP), Aus der Zwischenablage, Bild, Karteikarten.
+  Im ···-Menü von Notizbüchern und Textdokumenten liegen die Formate unter **Exportieren …** (PDF bzw. PDF (Drucken),
+  Goodnotes-Datei). Die Einstellungen zeigen Beta und Diagnose (Handschrift erkennen, Pencil-Aufzeichnung) eingeklappt
+  unter **Erweitert** am Ende; während einer Aufzeichnung ist der Abschnitt offen. Der Papierkorb hat keine
+  Filter-Tabs und zeigt immer alles.
 - **Bibliothek:** Kacheln ohne Rahmen; alle Objekte (Ordner, Cover, Seiten, Stapel) stehen auf einer gemeinsamen
   Grundlinie (ab v72). Neue Ordner sind hellblau `#8EB8E6`; 32 Ordnersymbole.
 - **Bewegung (ab v72):** Animationen 110–260 ms. Dialoge (`sheet()`, „Neues Notizbuch“, Vorlagen) folgen beim Ziehen am
