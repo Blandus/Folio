@@ -731,6 +731,7 @@ function buildToolbar() {
       { label: 'Papiervorlage ändern', icon: 'doc', action: () => changeTemplate() },
       { label: 'Seite duplizieren', icon: 'copy', action: () => duplicatePage(ed.cur) },
       { label: 'Seite leeren', icon: 'eraser', action: () => clearPage() },
+      '-', // the destructive entry stands apart, as in the page menu
       { label: 'Seite löschen', icon: 'trash', danger: true, action: () => deletePage(ed.cur) },
       '-',
       { label: 'Nur mit Stift zeichnen', checked: !settings.fingerDraw, action: () => { settings.fingerDraw = !settings.fingerDraw; saveSettings(); } },
