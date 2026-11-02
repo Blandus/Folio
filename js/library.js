@@ -4,7 +4,7 @@ import { store, light, settings, saveSettings, bus, newNotebook, newFolder, clon
 import { renderCover, renderThumb } from './render.js';
 import { menu, sheet, promptText, confirmBox, toast, segmented, toggle, swipeToDismiss } from './ui.js';
 import { pdfToPages, loadImageFile } from './pdf.js';
-import { openDoc } from './editor.js';
+import { openDoc, PALETTES } from './editor.js';
 import { suggestNames } from './suggest.js';
 import { sync, signIn, signOut, signedIn } from './sync.js';
 import { backupBox } from './backup.js';
@@ -822,22 +822,28 @@ async function clearConflicts(r) {
 // Colour (Folio palette + custom) and symbol for a folder, with a live preview.
 async function changeFolderLook(f) {
   let color = folderColor(f).startsWith('#') ? f.color : null, ic = folderIcon(f);
-  const isPalette = c => COVERS.some(x => x.toLowerCase() === c?.toLowerCase());
+  // Folio's cover colours first, then the colour picker's palettes (the pen palette setting stays untouched).
+  const sets = { folio: ['Folio', COVERS], ...Object.fromEntries(Object.entries(PALETTES).filter(([k]) => k !== 'folio').map(([k, [label, cols]]) => [k, [label, cols]])) };
+  const has = (cols, c) => cols.some(x => x.toLowerCase() === c?.toLowerCase());
+  let pal = Object.keys(sets).find(k => has(sets[k][1], color)) || 'folio';
+  const isPalette = c => Object.values(sets).some(([, cols]) => has(cols, c));
   const preview = h('div', { class: 'flook-preview' });
+  const tabs = h('div', { class: 'pal-tabs' });
   const colors = h('div', { class: 'flook-colors' }), icons = h('div', { class: 'flook-icons' });
   const custom = h('input', { type: 'color', class: 'flook-custom-input', 'aria-label': 'Eigene Farbe', value: color || '#6B8F7E', oninput: e => { color = e.target.value; render(); } });
   const render = () => {
     preview.replaceChildren(folderArt({ color, icon: ic }, ''));
+    tabs.replaceChildren(...Object.entries(sets).map(([k, [label]]) => h('button', { class: 'chip' + (pal === k ? ' on' : ''), onclick: () => { pal = k; render(); } }, label)));
     colors.replaceChildren(
       h('button', { class: 'flook-swatch' + (!color ? ' active' : ''), title: 'Standard', 'aria-label': 'Standardfarbe', style: { background: 'var(--sage)' }, onclick: () => { color = null; render(); } }),
-      ...COVERS.map(c => h('button', { class: 'flook-swatch' + (color?.toLowerCase() === c.toLowerCase() ? ' active' : ''), 'aria-label': 'Farbe ' + c, style: { background: c }, onclick: () => { color = c; render(); } })),
+      ...sets[pal][1].map(c => h('button', { class: 'flook-swatch' + (color?.toLowerCase() === c.toLowerCase() ? ' active' : ''), 'aria-label': 'Farbe ' + c, style: { background: c }, onclick: () => { color = c; render(); } })),
       h('label', { class: 'flook-swatch custom' + (color && !isPalette(color) ? ' active' : ''), title: 'Eigene Farbe', style: color && !isPalette(color) ? { background: color } : {} }, icon('plus', 16), custom));
     icons.replaceChildren(
       h('button', { class: 'flook-icon none' + (!ic ? ' active' : ''), title: 'Kein Symbol', onclick: () => { ic = null; render(); } }, h('span', {}, 'Kein')),
       ...FOLDER_ICONS.map(k => h('button', { class: 'flook-icon' + (ic === k ? ' active' : ''), 'aria-label': 'Symbol ' + k, onclick: () => { ic = k; render(); } }, icon(k, 22))));
   };
   render();
-  const body = h('div', { class: 'flook' }, preview, h('div', { class: 'flook-label' }, 'Farbe'), colors, h('div', { class: 'flook-label' }, 'Symbol'), icons);
+  const body = h('div', { class: 'flook' }, preview, h('div', { class: 'flook-label' }, 'Farbe'), tabs, colors, h('div', { class: 'flook-label' }, 'Symbol'), icons);
   if (await sheet({ title: 'Farbe & Symbol', body }) && (color !== (f.color || null) || ic !== (f.icon || null))) update(f, { color, icon: ic });
 }
 
