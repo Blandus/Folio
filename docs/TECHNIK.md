@@ -562,6 +562,11 @@ umbenennbar. Jeder Durchgang ist ab dem Anlegen eigenständig (Seiten hinzufüge
   seine Versionen mit (`trashedBy`) und bringt sie beim Wiederherstellen zurück; ein einzeln gelöschter Durchgang
   steht im Papierkorb als „Name – Durchgang 2“. Ist das Original endgültig weg, erscheinen die Versionen wieder als
   eigene Dokumente. „Duplizieren“ macht aus einer Version ein eigenständiges Dokument (ohne `versionOf`).
+- **Vorhandene Kopien zuordnen (ab v76):** Notizbuch → ··· → **Als Durchgang zuordnen …** (bei einem Durchgang:
+  „Anderem Dokument zuordnen …“) → Original wählen. Es wird dessen nächster „Durchgang N“ und übernimmt Name und
+  Ordner; eigene Durchgänge kommen mit, zugewiesene Stapel gehen an das neue Original. „Rückgängig“ im Hinweis stellt
+  den alten Stand her (die leichten Datensätze von vorher werden zurückgeschrieben; `store.put` entfernt dabei die
+  neuen Felder wieder). Getestet im Browser (Zuordnen, Gruppierung, Rückgängig).
 - **Sync:** Versionen werden nie als Duplikate zusammengeführt (`mergeDuplicates` in `sync.js`; ein leerer Durchgang
   kann inhaltsgleich mit einem leeren Original sein). Goodnotes-Kopien in Google Drive nur für das Original.
 

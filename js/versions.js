@@ -42,7 +42,7 @@ async function newVersion(src, blank) {
   const root = group[0] || src;
   const full = src.pages && !src.light ? src : await ensureLocal(src);
   if (!full) return null;
-  const n = Math.max(1, ...group.map(v => +(/(\d+)\s*$/.exec(v.versionName || '')?.[1] || 1))) + 1;
+  const n = Math.max(1, ...group.map(versionNo)) + 1;
   const v = cloneNotebook(full, root.name);
   for (const k of ['offloaded', 'remoteUpd', 'size', 'pageCount', 'thumb', 'conflicts', 'light', 'pdfFiles', 'versionName', 'trashed', 'trashedBy']) delete v[k];
   if (blank) for (const p of v.pages) p.elements = p.elements.filter(e => e.type !== 'stroke');
@@ -62,6 +62,22 @@ export async function askNewVersion(src) {
   const v = await newVersion(src, blank);
   if (v) toast(`„${v.versionName}“ erstellt`);
   return v;
+}
+
+// An existing notebook (e.g. a copy made before there were versions) becomes the next version of
+// target; versions of its own come along, its decks go to target. Resolves to a function that undoes it.
+const versionNo = v => +(/(\d+)\s*$/.exec(v.versionName || '')?.[1] || 1);
+export async function attachAsVersion(r, target) {
+  const list = await store.list();
+  let n = Math.max(1, ...versionsIn(list, target).map(versionNo)) + 1;
+  const moving = [list.find(x => x.id === r.id) || r, ...list.filter(x => alive(x) && x.versionOf === r.id)];
+  const decks = list.filter(x => alive(x) && x.kind === 'deck' && x.script === r.id);
+  const before = [...moving, ...decks].map(x => ({ ...x })); // light records: putting them back removes the new fields again
+  const now = Date.now();
+  for (const v of moving) Object.assign(v, { versionOf: target.id, versionName: `Durchgang ${n++}`, name: target.name, parent: target.parent ?? null, updated: now });
+  for (const d of decks) Object.assign(d, { script: target.id, updated: now });
+  await store.putMany([...moving, ...decks]);
+  return () => store.putMany(before.map(x => ({ ...x, updated: Date.now() })));
 }
 
 // The name of a group is the original's: renaming one renames the others too.

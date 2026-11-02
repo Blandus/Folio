@@ -14,7 +14,7 @@ import { renderCalendar, CAL_KINDS } from './calendar.js';
 import { ensureLocal, offload, runOffload, recordSize, offloadOn, offloadMin, OFFLOAD_SIZES, keepFilesLocal, offloadFolder } from './offload.js';
 import { recording, setRecording } from './pencilrec.js';
 import { htrOn, setHtr, htrDocIds } from './htr.js'; // HTR-Beta
-import { parentTile, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickScript } from './versions.js';
+import { parentTile, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickScript, pickFrom, attachAsVersion } from './versions.js';
 
 const SECTIONS = {
   docs: { label: 'Alle Notizen', icon: 'notes' },
@@ -597,6 +597,7 @@ function itemMenu(r, anchor) {
       { label: 'Öffnen', icon: 'doc', action: () => activate(r) },
       { label: 'Umbenennen', icon: 'rename', action: () => renameVersion(r) },
       { label: 'Neuer Durchgang …', icon: 'copy', action: () => newVersionOf(r) },
+      { label: 'Anderem Dokument zuordnen …', icon: 'move', action: () => attachTo(r) },
       { label: 'Exportieren …', icon: 'share', action: () => menu(at, [
         { label: 'PDF', icon: 'pdf', action: exportNb('pdf') },
         { label: 'Goodnotes-Datei (Beta)', icon: 'doc', action: exportNb('goodnotes') },
@@ -609,6 +610,7 @@ function itemMenu(r, anchor) {
     doc && { label: 'Öffnen', icon: 'doc', action: () => activate(r) },
     { label: 'Umbenennen', icon: 'rename', action: () => rename(r) },
     nb && !r.versionOf && { label: 'Neuer Durchgang …', icon: 'copy', action: () => newVersionOf(r) },
+    nb && { label: 'Als Durchgang zuordnen …', icon: 'move', action: () => attachTo(r) },
     doc && { label: 'Duplizieren', icon: 'copy', action: () => duplicate([r.id]) },
     { label: 'Verschieben', icon: 'move', action: () => moveItems([r.id]) },
     { label: r.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten', icon: r.favorite ? 'starFill' : 'star', action: () => update(r, { favorite: !r.favorite }) },
@@ -672,6 +674,20 @@ async function renameVersion(r) {
 async function newVersionOf(r) {
   const v = await askNewVersion(r);
   if (v) openDoc(v.id);
+}
+// an existing copy (or a version whose original is gone) becomes a version of another notebook
+async function attachTo(r) {
+  const targets = live().filter(x => x.kind === 'notebook' && !x.trashed && !x.versionOf && x.id !== r.id)
+    .sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
+  const n = id => versionsIn(records, byId(id)).length;
+  const id = await pickFrom(`„${titleOf(r)}“ als Durchgang zuordnen zu …`,
+    targets.map(t => ({ id: t.id, label: t.name, sub: n(t.id) > 1 ? `${n(t.id)} Versionen` : sub(t) })), { search: true, empty: 'Keine anderen Notizbücher.' });
+  if (!id) return;
+  const target = byId(id);
+  const undo = await attachAsVersion(r, target);
+  lib.expanded.add(id);
+  const v = (await store.getMeta(r.id))?.versionName || 'Durchgang';
+  toast(`Jetzt „${v}“ von „${target.name}“`, 6000, { label: 'Rückgängig', run: undo });
 }
 async function assignScript(r) {
   const id = await pickScript(r.script);
