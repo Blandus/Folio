@@ -842,9 +842,18 @@ Referenz: `design/folio-reference.png`.
   folgt der Systemeinstellung und lädt nichts von Google. Vorher Inter über Google Fonts. Feste Größenskala
   11 · 12 · 13 · 14 · 15 (Fließtext) · 16 · 17 · 20 · 22 · 28 · 34 px, Gewichte 500/600/700; ausgenommen ist nur der
   Inhalt von Textdokumenten (`.td-content`).
-- **Logo:** `folio-mark.svg` — drei gefächerte Papierlagen (Mist, Sage, Navy) mit gefalteter Ecke, eigene Zeichnung.
-  Daraus erzeugt: `apple-touch-icon.png`, `icon-192/512.png`, `favicon.png`, `logo.png`. Im dunklen Design wird die
-  vordere Lage hell (`--logo-front`).
+- **Logo (ab v83, App-Icon im Apple-Stil):** auf Folio-Blau (leichter Verlauf `#4C80B3` → `#335F8C`) drei gefächerte
+  Blätter — hinten Salbei `#9FC0B0`, Mitte Nebelblau `#BCD6F2`, vorne weißes Papier mit gefalteter Ecke und weichem
+  Schatten — und ein Handschrift-Strich in Folio-Blau; eigene Zeichnung, 1024er-Raster. Zwei Fassungen, bewusst
+  getrennt: **rund** (Ecken `rx 229` ≈ 22,4 %, außen transparent) in `folio-mark.svg`, `icon-192/512.png` (Manifest
+  `purpose: any`), `favicon.png`, `logo.png` — damit Windows das Icon in der Taskleiste und im Startmenü nicht als
+  spitzes Quadrat zeigt; **vollflächig quadratisch** in `apple-touch-icon.png` (iPadOS rundet selbst ab) und
+  `icon-maskable-192/512.png` (`purpose: maskable`, Android/Chrome schneiden selbst zu; alles Wichtige liegt in der
+  sicheren Zone). Vorher stand `any maskable` auf denselben Dateien, daher die eckige Taskleiste. Die PNGs werden mit
+  Edge im Headless-Modus aus den SVGs gerendert (`msedge --headless=new --screenshot … --default-background-color=00000000`).
+  In der App (Seitenleiste, Einstellungen) zeichnet `folioMark()` in `js/icons.js` dasselbe runde Icon inline, mit
+  eigenen ids pro Kopie. Ein installiertes Folio auf dem PC übernimmt das neue Icon erst, wenn der Browser das
+  Manifest neu einliest; notfalls die App einmal deinstallieren und neu installieren (nicht getestet).
 - **Bibliothek:** Seitenleiste (Alle Notizen, Zuletzt geöffnet, Favoriten, Papierkorb, Kalender, Ordner mit Farbe/Symbol,
   Sync + Einstellungen), Titel mit Suchfeld und rundem „+“, Filter-Tabs (Alle / Notizbücher / Textdokumente / Ordner),
   Sortierung, Raster/Liste, Karten mit Vorschau, Titel, Datum und „···“-Menü.

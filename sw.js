@@ -1,7 +1,7 @@
 // Offline cache for the app shell. Network first, so updates arrive as soon as you're online.
-const CACHE = 'folio-v82';
+const CACHE = 'folio-v83';
 const ASSETS = [
-  './', 'index.html', 'style.css', 'manifest.json', 'folio-mark.svg', 'favicon.png', 'logo.png', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
+  './', 'index.html', 'style.css', 'manifest.json', 'folio-mark.svg', 'favicon.png', 'logo.png', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png',
   'js/main.js', 'js/util.js', 'js/icons.js', 'js/store.js', 'js/render.js', 'js/ink.js', 'js/handwriting.js', 'js/ui.js',
   'js/library.js', 'js/editor.js', 'js/tools.js', 'js/pdf.js', 'js/pdf-export.js', 'js/sync.js', 'js/suggest.js', 'js/goodnotes.js', 'js/goodnotes-export.js', 'js/textdoc.js', 'js/richtext.js', 'js/addpage.js', 'js/merge.js', 'js/ics.js', 'js/calendar.js', 'js/offload.js', 'js/pdfdoc.js', 'js/pencilrec.js', 'js/htr.js', 'js/htr-worker.js', 'js/deck.js', 'js/srs.js', 'js/cardformat.js', 'js/inkpad.js', 'js/learnplan.js', 'js/versions.js', 'js/prefs.js', 'js/backup.js', 'datenschutz.html',
   'vendor/pdf/NotoSans-Bold.ttf',

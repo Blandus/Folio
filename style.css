@@ -29,7 +29,6 @@
   --on-primary: #FFFFFF;
   --danger: #D70015;
   --switch-on: #34C759;
-  --logo-fold: #F2F2F7;
   --canvas-bg: #F2F2F7;
   --ed-bar: #FFFFFF;
   --ed-bar-icon: #1C1C1E;
@@ -61,7 +60,7 @@
     --danger: #FF453A; --switch-on: #30D158; --canvas-bg: #000000; --ed-bar: #1C1C1E; --ed-bar-icon: #FFFFFF;
     --pill-glass: rgba(28, 28, 30, .78); --opt-bg: #1C1C1E; --sage: #7E9C8E;
     --shadow-md: 0 12px 32px rgba(0, 0, 0, .45); --shadow-float: 0 6px 20px rgba(0, 0, 0, .35);
-    --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, .35); --logo-front: #EEEAE2; --logo-fold: #121214;
+    --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, .35);
     color-scheme: dark;
   }
 }
@@ -76,7 +75,7 @@
   --danger: #FF453A; --switch-on: #30D158; --canvas-bg: #000000; --ed-bar: #1C1C1E; --ed-bar-icon: #FFFFFF;
   --pill-glass: rgba(28, 28, 30, .78); --opt-bg: #1C1C1E; --sage: #7E9C8E;
   --shadow-md: 0 12px 32px rgba(0, 0, 0, .45); --shadow-float: 0 6px 20px rgba(0, 0, 0, .35);
-  --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, .35); --logo-front: #EEEAE2; --logo-fold: #121214;
+  --shadow-card-hover: 0 8px 22px rgba(0, 0, 0, .35);
   color-scheme: dark;
 }
 @media (prefers-reduced-motion: reduce) {
