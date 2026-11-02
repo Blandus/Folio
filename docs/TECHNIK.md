@@ -626,10 +626,30 @@ design/folio-reference.png   Design-Referenz
 ## Design (Folio)
 Referenz: `design/folio-reference.png`.
 
-- **Farben** (Tokens in `style.css` → `:root`): Ink Navy `#0F2747` (Text, primäre Knöpfe), Sage Green `#6B8F7E`
-  (Ordner, Favoriten, Lesezeichen), Mist Blue `#8EB8E6` (Auswahl, aktive Werkzeuge, Fokus), Warm Stone `#D9D2C6`,
-  Soft Ivory `#FAF9F5` (Hintergrund). Dunkles Design: Navy-Anthrazit `#111A26`, Flächen `#18222F`, Text `#EEEAE2`.
-  Kein Rot in der Oberfläche (Löschen in gedecktem Bernstein); Rot bleibt nur als wählbare Tintenfarbe.
+- **Farben (ab v74: Apple-Systemfarben, Wunsch des Betreibers „wie aus dem App Store“)** (Tokens in `style.css` →
+  `:root`): Flächen, Text und Trenner folgen Apples Systemfarben — hell Weiß / `#F2F2F7` (Seitenleiste, gruppierte
+  Dialoge) / `#E5E5EA`, Text `#1C1C1E`, Nebentext `rgba(60,60,67,.8)`; dunkel echtes Schwarz, Flächen `#1C1C1E` /
+  `#2C2C2E` / `#3A3A3C`, Seitenleiste `#121214` (hebt sich von der Editor-Kopfzeile ab, damit Tabs lesbar bleiben),
+  Text Weiß, Nebentext `rgba(235,235,245,.7)`. **Eine** Akzentfarbe für alles Bedienbare: Folio-Blau `#3E6E9F`
+  (dunkel `#8FB4DD`) — Knöpfe, Symbole der Seitenleiste, Kopfzeilen-Symbole, Auswahl, aktive Werkzeuge. Die
+  gewählte Zeile der Seitenleiste ist mit dem Akzent gefüllt (weiße Schrift) wie in iPadOS. Löschen in Apple-Rot
+  (hell die kontraststarke Variante `#D70015`, dunkel `#FF453A`); die alte Regel „kein Rot in der Oberfläche“ gilt
+  nicht mehr. Schalter grün (`#34C759` / `#30D158`). Apples durchscheinende Füllungen `--fill` / `--fill-2` für
+  Suchfeld, Segmentschalter und graue Knöpfe; `--seg-on` für das gewählte Segment. Die Markenfarben (Ink Navy, Sage,
+  Mist, Stone, Ivory) bleiben für Logo, Heft-Einbände, Ordner, Tinten und den Lern-Hero — Inhalt, nicht Bedienung.
+- **Bedienelemente (ab v74):** Nebenknöpfe (`.pill-btn`) sind Apples graue Knöpfe: Akzent-Schrift auf `--fill`, ohne
+  Rahmen; nur die Hauptaktion ist gefüllt. Filter-Tabs, Raster/Liste und alle `.segmented` sind Segmentschalter
+  (graue Kapsel, gewähltes Segment hell mit Schatten). Suchfeld grau gefüllt ohne Rahmen. Menüs und Popover aus
+  Milchglas (`--menu-bg` + `backdrop-filter`, bei „Transparenz reduzieren“ deckend). Gruppierte Kästen, Listen und
+  Auswahllisten ohne Rahmen, wie gruppierte Zellen in iOS. Großer Titel fett (700). Auf dem Handy liegen die
+  Filter-Tabs in `.filter-scroll` (sonst `display: contents`), damit der Segmentschalter als Ganzes seitlich scrollt
+  statt seine Segmente in der grauen Kapsel abzuschneiden. Gesperrte Knöpfe stehen auf 45 % Deckkraft (vorher 30–35 %,
+  kaum erkennbar). Karten haben Rand **oder** Schatten, nicht beides (der Lernen-Leerzustand nur noch Rand).
+- **Symbole (ab v74):** eigene Zeichnungen im Stil der SF Symbols in `js/icons.js` (runde Enden, Strich 1,7, großzügige
+  Eckenradien, gefüllte Varianten für Stern/Lesezeichen). Die echten SF Symbols werden bewusst nicht verwendet: Apples
+  Lizenz erlaubt sie nur in Software für Apple-Plattformen. Überarbeitet wurden u. a. Zahnrad, Ordner, Papierkorb,
+  Teilen, Dokument, Seite hinzufügen, Kalender, Stift, Radierer, Textmarker, Bild, Kopieren, Einsetzen, Umbenennen,
+  Suche, Uhr, Stern, Lesezeichen, Pfeile; die übrigen folgten schon demselben Stil und wurden nur angeglichen.
 - **Schrift (ab v72):** Systemschrift (`-apple-system`, also SF auf iPad/Mac, Segoe UI auf Windows): wirkt nativ,
   folgt der Systemeinstellung und lädt nichts von Google. Vorher Inter über Google Fonts. Feste Größenskala
   11 · 12 · 13 · 14 · 15 (Fließtext) · 16 · 17 · 20 · 22 · 28 · 34 px, Gewichte 500/600/700; ausgenommen ist nur der
@@ -652,11 +672,19 @@ Referenz: `design/folio-reference.png`.
   auf allen Geräten). Endgültiges Löschen nennt den Namen des Objekts und, mit Sync, dass es auch auf den anderen
   Geräten verschwindet. Der Speicherhinweis sagt, dass importierte PDFs als Original-Datei Platz brauchen (seit v50
   keine Seitenbilder mehr).
-- **Kontrast:** Text erreicht überall mindestens 4,5:1 (WCAG AA). `--text-2` ist im Hellen `rgba(15,39,71,.68)`
-  (≥ 4,9:1 auch auf `--surface-3`), im Dunklen bleibt `.62` (≥ 5,1:1). `--text-3` ist **nur für Nicht-Text**
-  (Ränder, Griffpunkte, Skalenstriche, Trenner) und erreicht dafür 3:1 (hell `.5`, dunkel `.45`). Kleine
+- **Kontrast:** Text erreicht überall mindestens 4,5:1 (WCAG AA). Ab v74 ist `--text-2` im Hellen
+  `rgba(60,60,67,.8)` (≥ 4,7:1 auch auf `--surface-3`; Apples Standardwert `.6` wäre zu schwach), im Dunklen
+  `rgba(235,235,245,.7)`. `--text-3` ist **nur für Nicht-Text** (Ränder, Griffpunkte, Skalenstriche, Trenner) und
+  erreicht dafür 3:1 (hell `rgba(60,60,67,.6)`, dunkel `rgba(235,235,245,.45)`). Kleine
   Beschriftungen wie Seitenleisten-Label, Such-Platzhalter, Kalenderstunden und `.fc-tag` nutzen `--text-2`; in der
   Lernvorschau sind Wochentage `--text` und Wochenenden `--text-2`.
+- **Kalender und Lernen (v74):** Der Kalender springt beim Öffnen (aus einer anderen Ansicht kommend) in der
+  aktuellen Woche so, dass die Jetzt-Linie im oberen Drittel steht (abends begrenzt durch das Tagesende); andere
+  Wochen starten wie bisher bei 7:00 bzw. dem frühesten Termin. Neuzeichnen innerhalb des Kalenders (Sync, Woche
+  wechseln) behält die Scrollposition (`cal.scroll`). Die Spalte „heute“ nutzt `--cal-today`: hell wie `--accent-soft`,
+  dunkel nur `.07`, damit sie nicht als harter Block heraussticht. Die Quellen-Legende hat 13 px. Der leere Zustand
+  von Lernen zeigt statt eines Icon-Kästchens denselben Kartenstapel wie die Stapel in der Bibliothek, noch leer
+  (liniert, `.lp-empty-art`).
 - **Absicherung:** „In den Papierkorb“ zeigt 6 s lang einen Toast mit **Rückgängig** (`toast(msg, ms, {label, run})`
   in `js/ui.js`; nur Toasts mit Aktion nehmen Klicks an, alle anderen bleiben `pointer-events: none`). Im Mehr-Menü
   des Editors steht „Seite löschen“ durch einen Trenner von „Seite leeren“ getrennt, wie im Seitenmenü. Die

@@ -301,7 +301,8 @@ function renderHeader() {
     class: 'filter-tab' + (lib.filter === k ? ' on' : ''), role: 'tab', 'aria-selected': lib.filter === k ? 'true' : 'false',
     onclick: () => { lib.filter = k; settings.filter = k; saveSettings(); renderHeader(); renderContent(); },
   }, label)));
-  head.replaceChildren(titlebar, h('div', { class: 'lib-toolbar' }, tabs, h('div', { class: 'spacer' }), h('div', { class: 'lib-actions' }, ...right.flat())));
+  // the wrapper lets the whole segmented control scroll sideways on a phone (on wider screens it is display: contents)
+  head.replaceChildren(titlebar, h('div', { class: 'lib-toolbar' }, tabs && h('div', { class: 'filter-scroll' }, tabs), h('div', { class: 'spacer' }), h('div', { class: 'lib-actions' }, ...right.flat())));
 }
 function renderHeaderTitle() { $('#libTitle').textContent = lib.query ? 'Suche' : (lib.folder ? byId(lib.folder).name : SECTIONS[lib.section].label); }
 

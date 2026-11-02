@@ -285,6 +285,7 @@ function layout(list) {
 // ---------- View ----------
 let headEl, bodyEl;
 export async function renderCalendar(head, content) {
+  if (!content.querySelector('.cal')) cal.scroll = null; // coming from another view: start at the current time again
   headEl = head; bodyEl = content;
   cal.records = (await store.list()).filter(r => CAL_KINDS.has(r.kind));
   if (gcfg().on && gValid() && !cal.gcache.has(cal.ws) && !cal.loadingG) gLoadWeek().then(render);
@@ -368,9 +369,12 @@ function draw() {
     cal.gerr ? h('span', { class: 'cal-src err' }, '⚠ ' + cal.gerr) : null);
 
   bodyEl.replaceChildren(h('div', { class: 'cal' }, legend, h('div', { class: 'cal-grid' }, heads, alldayRow, scroller)));
-  // first view: from 7:00 (or the earliest event of the week)
-  const earliest = Math.min(...timed.flat().map(x => new Date(x.s).getHours()), 7);
-  scroller.scrollTop = cal.scroll ?? Math.max(0, earliest - 0.5) * HOUR;
+  // first view: this week → the current time in the upper third; other weeks → from 7:00 (or the earliest event)
+  const now = new Date(), earliest = Math.min(...timed.flat().map(x => new Date(x.s).getHours()), 7);
+  const first = days.some(d => ymd(d) === today)
+    ? (now.getHours() + now.getMinutes() / 60) * HOUR - scroller.clientHeight / 3
+    : (earliest - 0.5) * HOUR;
+  scroller.scrollTop = cal.scroll ?? Math.max(0, first);
 }
 
 function defaultSlot() {
