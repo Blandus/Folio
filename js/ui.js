@@ -54,7 +54,9 @@ export function popover(anchor, content, { className = '' } = {}) {
     window.visualViewport?.removeEventListener('scroll', place);
     document.removeEventListener('pointerdown', onDown, true);
     document.removeEventListener('keydown', onKey);
-    pop.remove();
+    // short fade towards the trigger (same origin it grew from); gone for input at once
+    pop.classList.add('closing');
+    setTimeout(() => pop.remove(), 110);
     if (current === api) current = null;
   }
   const api = { close, el: pop, place, anchor };
@@ -92,7 +94,7 @@ export function sheet({ title, body, done = 'Fertig', onDone, cancel = true, cla
     };
     const submit = async () => { const v = onDone ? await onDone() : true; if (v !== false) finish(v); };
     const onKey = e => {
-      if (e.key === 'Escape') { if (document.querySelector('.popover')) return; finish(null); } // Esc closes an open menu first
+      if (e.key === 'Escape') { if (document.querySelector('.popover:not(.closing)')) return; finish(null); } // Esc closes an open menu first
       if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
     };
     document.addEventListener('keydown', onKey);
@@ -105,7 +107,61 @@ export function sheet({ title, body, done = 'Fertig', onDone, cancel = true, cla
     back.append(box);
     back.addEventListener('pointerdown', e => { if (e.target === back) finish(null); });
     document.body.append(back);
+    swipeToDismiss(box, () => finish(null));
     box.querySelector('input:not([type=color]):not([type=checkbox])')?.focus();
+  });
+}
+
+// ---------- Swipe down to dismiss (dialogs) ----------
+// Dragging a dialog by its top area moves it 1:1 with the finger (resisting upwards). On release
+// the motion is projected from the release velocity: far or fast enough down → it leaves
+// downwards at that speed, otherwise it springs back. Grabbing it again mid-motion takes over.
+const project = (v, d = 0.99) => (v / 1000) * d / (1 - d); // where a flick would come to rest
+const rubber = (x, dim, c = 0.55) => (x * dim * c) / (dim + c * Math.abs(x));
+// critically damped spring from `from` to `to`, starting at velocity v (px/s); returns stop()
+function spring(from, to, v, set, done, response = 0.35) {
+  const w = 2 * Math.PI / response;
+  let x = from - to, raf, last = performance.now();
+  const step = now => {
+    const dt = Math.min(0.032, (now - last) / 1000); last = now;
+    v += (-w * w * x - 2 * w * v) * dt; x += v * dt;
+    if (Math.abs(x) < 0.5 && Math.abs(v) < 20) { set(to); done?.(); return; }
+    set(to + x); raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(raf);
+}
+export function swipeToDismiss(box, onDismiss, { grip = 56 } = {}) {
+  const back = box.parentElement;
+  let y = 0, stop = null;
+  const set = v => { y = v; box.style.transform = v ? `translateY(${v}px)` : ''; if (back) back.style.opacity = v > 0 ? String(1 - Math.min(0.6, v / (box.offsetHeight * 1.5))) : ''; };
+  box.addEventListener('pointerdown', e => {
+    if (e.button > 0 || e.target.closest('button, input, textarea, select, a, [contenteditable="true"], .stepper')) return;
+    if (e.clientY - box.getBoundingClientRect().top + y > grip) return; // only the top area is a handle
+    stop?.(); stop = null;
+    const start = e.clientY - Math.max(0, y), hist = [];
+    let dragging = false;
+    const move = ev => {
+      const dy = ev.clientY - start;
+      if (!dragging && Math.abs(dy) < 6) return;
+      if (!dragging) { dragging = true; try { box.setPointerCapture(e.pointerId); } catch {} box.style.animation = 'none'; }
+      hist.push([ev.timeStamp, ev.clientY]); if (hist.length > 6) hist.shift();
+      set(dy >= 0 ? dy : rubber(dy, box.offsetHeight));
+    };
+    const up = ev => {
+      box.removeEventListener('pointermove', move); box.removeEventListener('pointerup', up); box.removeEventListener('pointercancel', up);
+      if (!dragging) return;
+      const [t0, y0] = hist[0] || [0, 0], [t1, y1] = hist[hist.length - 1] || [0, 0];
+      // velocity of the last moves; none if the finger rested before lifting
+      const v = t1 > t0 && ev.timeStamp - t1 < 80 ? (y1 - y0) / (t1 - t0) * 1000 : 0;
+      const h = box.offsetHeight;
+      if (y + project(v) > Math.max(120, h * 0.4) && v > -100) {
+        box.classList.add('swiped');
+        stop = spring(y, h + 80, Math.max(v, 600), set, null, 0.3);
+        onDismiss();
+      } else stop = spring(y, 0, v, set, () => { stop = null; });
+    };
+    box.addEventListener('pointermove', move); box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
   });
 }
 

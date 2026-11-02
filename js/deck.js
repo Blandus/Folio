@@ -537,7 +537,7 @@ function renderStudy() {
 
 // Keyboard: Space/Enter show the answer, then 1 / 2 / 3 (Space = Richtig); Strg+Z undo; E edit; Esc end
 document.addEventListener('keydown', e => {
-  if (!dk.session || view().hidden || document.querySelector('.backdrop, .popover')) return;
+  if (!dk.session || view().hidden || document.querySelector('.backdrop:not(.closing), .popover:not(.closing)')) return;
   if (e.target.matches?.('input, textarea, [contenteditable="true"]')) return;
   const s = dk.session, k = e.key;
   if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { e.preventDefault(); return undo(); }

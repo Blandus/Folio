@@ -5,7 +5,7 @@ import { h, uid, pickFile } from './util.js';
 import { icon } from './icons.js';
 import { settings, saveSettings, newPage, TEMPLATES, TEMPLATE_SECTIONS, PAPERS, COVERS, PAGE_W } from './store.js';
 import { renderThumb, renderCover, pageH } from './render.js';
-import { popover, closePopover, menu, segmented, toast } from './ui.js';
+import { popover, closePopover, menu, segmented, toast, swipeToDismiss } from './ui.js';
 import { loadImageFile, pdfToPages } from './pdf.js';
 
 const COVER_NAMES = ['Ink Navy', 'Tiefblau', 'Mist Blue', 'Sage Green', 'Tannengrün', 'Schiefer', 'Warm Stone', 'Sand', 'Ocker', 'Pflaume', 'Graphit', 'Soft Ivory'];
@@ -145,7 +145,7 @@ function templateWindow(ctx, cur, insert) {
     close();
   };
   // Escape / Enter belong to an open size or colour menu first
-  const onKey = e => { if (document.querySelector('.popover') || e.target.tagName === 'INPUT') return; if (e.key === 'Escape') close(); else if (e.key === 'Enter') confirm(); };
+  const onKey = e => { if (document.querySelector('.popover:not(.closing)') || e.target.tagName === 'INPUT') return; if (e.key === 'Escape') close(); else if (e.key === 'Enter') confirm(); };
   document.addEventListener('keydown', onKey);
 
   const top = h('div', { class: 'tw-top' }), gallery = h('div', { class: 'tw-gallery' });
@@ -232,4 +232,5 @@ function templateWindow(ctx, cur, insert) {
   back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
   render();
   document.body.append(back);
+  swipeToDismiss(back.firstElementChild, close);
 }
