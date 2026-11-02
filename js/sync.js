@@ -265,6 +265,7 @@ export async function syncGoodnotesCopies(folders, local) {
   let built = 0;
   for (const r of local.values()) {
     if (r.kind !== 'notebook' && r.kind !== 'textdoc') continue;
+    if (r.versionOf) continue; // versions (versions.js): only the original gets a copy
     // A copy renders every page into one file in memory: long documents (textbooks) are left
     // out, an iPad could not hold it. Their PDF is in Drive anyway.
     if ((r.pageCount ?? r.pages?.length ?? 0) > GN_MAX_PAGES) continue;
@@ -328,7 +329,8 @@ export async function mergeDuplicates(records, now = Date.now(), same = samePage
   // Notebooks: only exact copies (same name, same place, same content) are merged.
   // (stubs of documents kept only in Drive have no content to compare: never merged)
   // Candidates by name, place and page count; the content itself is compared per pair.
-  for (const [keep, ...rest] of groupBy('notebook', r => (r.offloaded ? 'stub|' + r.id : `${r.parent || ''}|${r.name.trim().toLowerCase()}|${r.pageCount ?? r.pages?.length}`))) {
+  // (versions of a notebook, versions.js, may look exactly alike: never merged either)
+  for (const [keep, ...rest] of groupBy('notebook', r => (r.offloaded || r.versionOf ? 'own|' + r.id : `${r.parent || ''}|${r.name.trim().toLowerCase()}|${r.pageCount ?? r.pages?.length}`))) {
     for (const d of rest) if (await same(keep, d)) { live.delete(d.id); changed.set(d.id, tombstone(d, now)); }
   }
   return [...changed.values()];

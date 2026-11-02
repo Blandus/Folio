@@ -3,7 +3,7 @@ import { $, h, uid, clamp, debounce, pickFile, onContext } from './util.js';
 import { icon } from './icons.js';
 import { store, settings, saveSettings, bus, PAGE_W, newPage, TEMPLATES } from './store.js';
 import { renderPage, renderThumb, pageH, pageW, pageX0, pageY0, fitInfinite, drawStroke, FONTS, fontFamily } from './render.js';
-import { menu, popover, sheet, toast, segmented, closePopover, promptText, toggle } from './ui.js';
+import { menu, popover, sheet, toast, segmented, closePopover, promptText, toggle, confirmBox } from './ui.js';
 import { exportPdf, exportPng, loadImageFile } from './pdf.js';
 import { suggestNames } from './suggest.js';
 import { renderLibrary, templatePicker, openSettings, showConflicts } from './library.js';
@@ -12,6 +12,7 @@ import { addPageMenu as openAddPage } from './addpage.js';
 import { ensureLocal } from './offload.js';
 import { showTextDoc, leaveTextDoc } from './textdoc.js';
 import { htrOn, htrQueue, htrSearchDoc } from './htr.js'; // HTR-Beta
+import { rootId, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickFrom } from './versions.js';
 
 // Page canvases only need to look fine while scrolling; the detail layer provides sharpness.
 // Keeping them smaller saves iPad memory and makes each re-render faster.
@@ -138,6 +139,7 @@ export async function activateTab(key, page) {
   clearSelection();
   restoreView(tab, page);
   renderTabs(); renderThumbs(); updateChrome(); renderOptions();
+  refreshLinks();
 }
 
 function hideEditor() {
@@ -185,12 +187,13 @@ function restoreView(tab, page) {
   updateCurrent();
 }
 
+const tabName = r => (r.versionOf ? `${r.name} · ${versionLabel(r)}` : r.name);
 async function renderTabs() {
   for (const id of new Set(ed.tabs.map(t => t.id))) {
-    if (id === ed.doc?.id) { tabNames.set(id, ed.doc.name); continue; }
+    if (id === ed.doc?.id) { tabNames.set(id, tabName(ed.doc)); continue; }
     const r = await store.getMeta(id);
     if (!r || r.deleted || r.trashed) ed.tabs = ed.tabs.filter(t => t.id !== id);
-    else tabNames.set(id, r.name);
+    else tabNames.set(id, tabName(r));
   }
   tabbar.querySelector('#tabs').replaceChildren(...ed.tabs.map(t => h('div', { class: 'tab' + (t.key === ed.tab ? ' active' : ''), 'data-key': t.key },
     h('button', { class: 'tab-title', onclick: () => t.key !== ed.tab && activateTab(t.key) }),
@@ -683,12 +686,103 @@ const toolBtn = ([id, label, ic]) => h('button', {
 
 function exportMenu(anchor) {
   menu(anchor, [
-    { label: 'Dokument als PDF', icon: 'pdf', action: () => exportPdf(ed.doc) },
+    // with several versions (versions.js) these ask which ones
+    { label: 'Dokument als PDF', icon: 'pdf', action: async () => { await flushSave(); exportVersions(ed.doc, 'pdf'); } },
     { label: 'Aktuelle Seite als PDF', icon: 'doc', action: () => exportPdf(ed.doc, [currentPage()]) },
     { label: 'Aktuelle Seite als Bild', icon: 'image', action: () => exportPng(ed.doc, currentPage(), ed.cur) },
     '-',
-    { label: 'Als Goodnotes-Datei (Beta)', icon: 'doc', action: async () => { await flushSave(); (await import('./goodnotes-export.js')).exportGoodnotes(ed.doc); } },
+    { label: 'Als Goodnotes-Datei (Beta)', icon: 'doc', action: async () => { await flushSave(); exportVersions(ed.doc, 'goodnotes'); } },
   ]);
+}
+
+// ---------- Versions and flashcards (versions.js) ----------
+// The version switcher and the flashcard button show up once there is something to show.
+ed.links = { versions: [], decks: [] };
+async function refreshLinks() {
+  const doc = ed.doc;
+  if (!doc) return;
+  const list = await store.list();
+  if (ed.doc !== doc) return;
+  ed.links = { versions: versionsIn(list, doc), decks: decksIn(list, rootId(doc)) };
+  $('#btnVersion').hidden = ed.links.versions.length < 2;
+  $('#versionText').textContent = versionLabel(doc);
+  $('#btnCards').hidden = !ed.links.decks.length;
+}
+// versions or decks created elsewhere (library, sync)
+bus.addEventListener('change', e => { if (ed.doc && !view.hidden && e.detail !== ed.doc.id) refreshLinks(); });
+
+function versionMenu(anchor) {
+  const doc = ed.doc;
+  menu(anchor, [
+    ...ed.links.versions.map(v => ({ label: versionLabel(v), checked: v.id === doc.id, action: () => v.id !== doc.id && switchVersion(v.id) })),
+    '-',
+    { label: 'Neuer Durchgang …', icon: 'plus', action: newVersionHere },
+    { label: 'Umbenennen', icon: 'rename', action: renameVersionHere },
+    doc.versionOf && { label: 'Diesen Durchgang löschen', icon: 'trash', danger: true, action: deleteVersionHere },
+  ]);
+}
+// Shows another version in the same tab, at the same place (same page, same zoom).
+async function switchVersion(id) {
+  await finishText(); await flushSave(); saveView();
+  const t = tabOf(ed.tab);
+  if (!t) return openDoc(id);
+  t.id = id;
+  persistTabs();
+  return activateTab(t.key);
+}
+async function newVersionHere() {
+  await finishText(); await flushSave();
+  const v = await askNewVersion(ed.doc);
+  if (v) switchVersion(v.id);
+}
+async function renameVersionHere() {
+  const name = await promptText('Durchgang umbenennen', versionLabel(ed.doc));
+  if (!name) return;
+  ed.doc.versionName = name; changed(); await flushSave();
+  renderTabs(); refreshLinks();
+}
+async function deleteVersionHere() {
+  const doc = ed.doc;
+  if (!await confirmBox(`„${versionLabel(doc)}“ löschen?`, 'Der Durchgang kommt in den Papierkorb und lässt sich dort wiederherstellen.', 'In Papierkorb', true)) return;
+  await finishText(); await flushSave();
+  const now = Date.now();
+  Object.assign(doc, { trashed: now, trashedBy: null, updated: now });
+  await store.put(doc);
+  toast('In den Papierkorb gelegt');
+  switchVersion(doc.versionOf);
+}
+
+function cardsMenu(anchor) {
+  menu(anchor, [
+    ...ed.links.decks.map(d => ({ label: d.name, icon: 'cards', action: () => goDeck(d.id) })),
+    ed.links.decks.length ? '-' : null,
+    { label: 'Neuer Stapel für dieses Skript', icon: 'plus', action: newScriptDeck },
+    { label: 'Stapel zuweisen …', icon: 'move', action: assignDeckHere },
+  ]);
+}
+async function goDeck(id) {
+  await showLibrary();
+  (await import('./deck.js')).openDeck(id);
+}
+const scriptRoot = () => ed.links.versions[0] || ed.doc;
+async function newScriptDeck() {
+  const root = scriptRoot();
+  const { newDeck } = await import('./deck.js');
+  const d = Object.assign(newDeck({ name: `${root.name} – Karteikarten`, parent: root.parent ?? null }), { script: rootId(ed.doc) });
+  await store.put(d);
+  goDeck(d.id);
+}
+async function assignDeckHere() {
+  const root = rootId(ed.doc);
+  const decks = (await store.list()).filter(r => r.kind === 'deck' && !r.deleted && !r.trashed && r.script !== root)
+    .sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
+  const id = await pickFrom('Stapel zuweisen', decks.map(d => ({ id: d.id, label: d.name, sub: d.script ? 'gehört zu einem anderen Skript' : `${d.cardCount ?? 0} Karten` })),
+    { search: true, empty: 'Keine weiteren Karteikarten-Stapel.' });
+  if (!id) return;
+  const d = await store.getMeta(id);
+  await store.put({ ...d, script: root, updated: Date.now() });
+  toast(`„${d.name}“ gehört jetzt zu diesem Skript`);
+  refreshLinks();
 }
 
 function buildToolbar() {
@@ -701,6 +795,9 @@ function buildToolbar() {
         { label: 'Umbenennen', icon: 'rename', action: renameDoc },
         { label: 'Papiervorlage ändern', icon: 'doc', action: () => changeTemplate() },
         { label: 'Exportieren', icon: 'share', action: () => exportMenu($('#btnShare')) },
+        '-',
+        { label: 'Neuer Durchgang …', icon: 'copy', action: newVersionHere },
+        { label: 'Karteikarten …', icon: 'cards', action: () => cardsMenu($('#docTitle')) },
         '-',
         { label: 'Zur Bibliothek', icon: 'library', action: showLibrary },
       ]),
@@ -719,11 +816,16 @@ function buildToolbar() {
     h('button', { id: 'zoomLabel', class: 'mono', title: 'Auf 100 % zurücksetzen', onclick: () => setZoom(1) }, '100 %'),
     h('button', { title: 'Vergrößern', onclick: () => setZoom(ed.zoom * 1.2) }, icon('plus', 18)));
   $('#tbRight').append(
+    // "Original ▾" / "Durchgang 2 ▾" once the document has versions (on the right: the left part
+    // of the header has no room for it next to the title on an iPad)
+    h('button', { class: 'version-pill', id: 'btnVersion', hidden: true, title: 'Version wechseln', onclick: e => versionMenu(e.currentTarget) },
+      h('span', { id: 'versionText' }), icon('chevronDown', 12)),
     // only shown while the sync merge left notes on this document
     tb('btnConflict', 'sync', 'Sync-Hinweise', async () => {
       const doc = ed.doc;
       if (await showConflicts(doc) && ed.doc === doc) { delete doc.conflicts; changed(); updateChrome(); }
     }),
+    Object.assign(tb('btnCards', 'cards', 'Karteikarten zu diesem Skript', e => cardsMenu(e.currentTarget)), { hidden: true }),
     tb('btnAdd', 'addPage', 'Seite hinzufügen', e => addPageMenu(e.currentTarget)),
     tb('btnShare', 'share', 'Exportieren', e => exportMenu(e.currentTarget)),
     tb('btnMore', 'moreCircle', 'Mehr', e => menu(e.currentTarget, [
@@ -743,6 +845,7 @@ async function renameDoc() {
   const name = await promptText('Umbenennen', ed.doc.name, '', suggestNames(ed.doc));
   if (!name) return;
   ed.doc.name = name; changed(); renderTabs();
+  renameGroup(ed.doc, name); // all versions carry the original's name
 }
 
 export function selectTool(t) {

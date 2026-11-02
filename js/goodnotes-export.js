@@ -476,11 +476,17 @@ async function textDocToGoodnotes(doc, { quiet = false } = {}) {
 // The .goodnotes file is built in memory with an image of every page: long documents are refused
 // (instead of the app running out of memory on an iPad).
 export const MAX_GN_PAGES = 150;
+const gnFileName = doc => (doc.name || 'Folio').replace(/[\\/:*?"<>|]/g, '_') + '.goodnotes';
+// The .goodnotes file of a document (several versions are exported together, see versions.js)
+export async function goodnotesFile(doc) {
+  if ((doc.pages?.length || 0) > MAX_GN_PAGES) throw new Error(`„${doc.name}“ ist zu lang für den Goodnotes-Export (${doc.pages.length} Seiten, höchstens ${MAX_GN_PAGES})`);
+  return new File([await notebookToGoodnotes(doc)], gnFileName(doc), { type: 'application/octet-stream' });
+}
 export async function exportGoodnotes(doc) {
   if ((doc.pages?.length || 0) > MAX_GN_PAGES) return toast(`Zu lang für den Goodnotes-Export (${doc.pages.length} Seiten, höchstens ${MAX_GN_PAGES}). Als PDF exportieren geht.`, 5000);
   try {
     const blob = await notebookToGoodnotes(doc);
-    const name = (doc.name || 'Folio').replace(/[\\/:*?"<>|]/g, '_') + '.goodnotes';
+    const name = gnFileName(doc);
     const file = new File([blob], name, { type: 'application/octet-stream' });
     // iPad: share sheet ("In Goodnotes öffnen" / "In Dateien sichern"). iOS only opens it right
     // after a tap, and building the file takes too long for that — so ask for one more tap.

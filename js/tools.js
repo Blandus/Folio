@@ -660,6 +660,7 @@ async function screenshot(d) {
     preview,
     window.ClipboardItem ? item('Kopieren', 'copy', async () => { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Screenshot kopiert'); }) : null,
     navigator.canShare?.({ files: [file] }) ? item('Teilen / Bild sichern', 'share', () => navigator.share({ files: [file] })) : null,
+    item('Als Karteikarte', 'cards', () => areaToCard(d.page, x, y, w, hh)),
     item('Herunterladen', 'pdf', () => { const l = h('a', { href: preview.src, download: name }); l.click(); })));
 }
 
@@ -1162,6 +1163,7 @@ export function renderSelection() {
       btn('Ausschneiden', 'cut', cutSelection),
       btn('Kopieren', 'copy', copySelection),
       btn('Duplizieren', 'copy', duplicateSelection),
+      btn('Karteikarte', 'cards', selectionToCard),
       btn('Löschen', 'trash', deleteSelection)),
     single
       ? [h('div', { class: 'sel-wh l', 'data-side': 'l', title: 'Breite ändern (Text bricht neu um)' }), h('div', { class: 'sel-wh r', 'data-side': 'r', title: 'Breite ändern (Text bricht neu um)' })]
@@ -1202,6 +1204,32 @@ function placeCopies(page, els, dx, dy = dx) {
   selectIds(page, copies.map(c => c.id));
 }
 function duplicateSelection() { if (ed.sel) placeCopies(ed.sel.page, selEls(), 20); }
+
+// ---------- Flashcard from an area (versions.js) ----------
+// The area of the page (with its paper / PDF background) as a picture of at most 1200 px.
+async function cardImage(page, x, y, w, hh) {
+  const s = Math.min(2, 1200 / Math.max(w, hh));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(hh * s));
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); // JPEG has no transparency
+  await renderPage(ctx, page, s, null, -(x - pageX0(page)) * s, -(y - pageY0(page)) * s);
+  const img = { src: c.toDataURL('image/jpeg', 0.85), w: c.width, h: c.height };
+  c.width = c.height = 0;
+  return img;
+}
+async function areaToCard(page, x, y, w, hh) {
+  const img = await cardImage(page, x, y, w, hh);
+  (await import('./versions.js')).cardFromArea(ed.doc, page, img);
+}
+// the lasso selection's box, a little larger, within the page
+function selectionToCard() {
+  if (!ed.sel) return;
+  const page = ed.sel.page, b = unionBox(selEls()), pad = 16;
+  const x = Math.max(pageX0(page), b.x - pad), y = Math.max(pageY0(page), b.y - pad);
+  const w = Math.min(pageX0(page) + pageW(page), b.x + b.w + pad) - x, hh = Math.min(pageY0(page) + pageH(page), b.y + b.h + pad) - y;
+  areaToCard(page, x, y, w, hh);
+}
 function paste() {
   if (!clipboard?.length) return toast('Zwischenablage ist leer');
   placeCopies(currentPage(), structuredClone(clipboard), 20);

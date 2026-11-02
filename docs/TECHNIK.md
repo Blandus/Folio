@@ -33,6 +33,10 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   bis 60 Seiten und 3 pro Durchgang. Größere Dokumente bekommen eine Meldung statt eines Absturzes.
 - **Beispiel-Notizbücher mit festen IDs und festem Datum** (`seed()` in `js/main.js`): jedes Gerät legt dieselben
   Datensätze an, damit der Sync keine Duplikate erzeugt. Die Bibliothek zeigt dafür „Beispiel“ statt des Datums.
+- **Durchgänge sind eigene Datensätze mit `versionOf`** (`js/versions.js`, ab v75) und werden beim Sync nie als
+  Duplikate zusammengeführt: ein leerer Durchgang kann inhaltsgleich mit dem Original sein, die Duplikat-Bereinigung
+  hätte ihn sonst gelöscht. Der Umschalter sitzt rechts in der Kopfzeile, weil links neben dem Titel auf dem iPad
+  kein Platz ist.
 - **Kalender-Feeds sind Nutzereingaben:** private ICS-Adressen nie in Code, Beispieldaten oder Logs.
 - **Design-Regeln (ab v72):** Systemschrift; nur die Schriftgrößen 11 · 12 · 13 · 14 · 15 · 16 · 17 · 20 · 22 · 28 · 34 px
   (Kommentar bei `--font` in `style.css`); Dialoge per Wischen schließbar (`swipeToDismiss` in `js/ui.js`), Schließen
@@ -531,8 +535,60 @@ geändert → Sync-Hinweis). „Lernfortschritt zurücksetzen“ setzt `reset` (
 mehr, auch wenn sie von einem anderen Gerät nachkommen. Eine auf einem Gerät gelöschte Karte bleibt gelöscht, auch
 wenn sie auf dem anderen inzwischen gelernt wurde (nur eine Textänderung holt sie zurück).
 
-Speicherformat: `{ kind: 'deck', id, name, parent, …, retention?, newPerDay?, cards: [{ id, front, back, frontInk?, backInk?, created,
-log?, reset? }] }`.
+Speicherformat: `{ kind: 'deck', id, name, parent, …, retention?, newPerDay?, script?, cards: [{ id, front, back, frontInk?, backInk?,
+frontImg?, backImg?, ref?, created, log?, reset? }] }`.
+
+## Durchgänge (Versionen) und Skripte mit Karteikarten (ab v75)
+Wunsch des Betreibers: ein Übungsblatt ein zweites Mal bearbeiten, ohne dass in der Bibliothek „Kopie von …“-Dateien
+entstehen, und Karteikarten fest an ihr Skript hängen. Code: `js/versions.js`.
+
+**Durchgänge:** Notizbuch → ··· → **Neuer Durchgang …** (Bibliothek) oder Titelmenü / Umschalter im Dokument.
+Wahl **Ohne Handschrift** (Stift, Textmarker und Formen fallen weg, d. h. alle Elemente `type: 'stroke'`;
+Textfelder, Bilder, Papier und PDF bleiben) oder **Mit Handschrift**. Namen „Original“, „Durchgang 2“, „Durchgang 3“ …,
+umbenennbar. Jeder Durchgang ist ab dem Anlegen eigenständig (Seiten hinzufügen/löschen betrifft nur ihn).
+- **Im Dokument:** Umschalter „Durchgang 2 ▾“ in der Kopfzeile, **rechts** neben den Werkzeugen (erscheint ab zwei
+  Versionen). Links neben dem Titel war auf dem iPad quer (1180 px) zu wenig Platz: Titel und Umschalter wurden beide
+  abgeschnitten. Unter 1000 px Breite wird er kompakter (ohne Pfeil). Wechseln zeigt die andere Version im selben Tab
+  an derselben Stelle. Dort auch: neuer Durchgang, umbenennen, Durchgang löschen (Papierkorb).
+- **In der Bibliothek:** eine Kachel; „3 Versionen · 1 Stapel“ unter dem Datum klappt die Versionen und zugewiesenen
+  Stapel darunter auf (Raster und Liste). Diese Kacheln lassen sich nicht in Ordner ziehen (sie wandern mit dem
+  Original); langes Drücken öffnet ihr Menü. In Suche und „Zuletzt geöffnet“ erscheinen Durchgänge nicht einzeln.
+- **Export:** PDF bzw. Goodnotes fragt bei mehreren Versionen per Schalter, welche; je Version eine Datei
+  („Name – Durchgang 2.pdf“). iPad: ein Teilen-Menü mit allen Dateien (ein Tipp mehr, wie beim Goodnotes-Export);
+  PC: nacheinander heruntergeladen. Einzelseiten-Export (Seite als PDF/Bild) gilt nur für die offene Version.
+- **Speicherung:** jede Version ist ein eigenes Notizbuch mit `versionOf: <id des Originals>` und `versionName`.
+  Dadurch funktionieren Sync, Zusammenführen, „Nur in Google Drive“ und PDF-Originale ohne Sonderfälle. Name und
+  Ordner folgen dem Original (Umbenennen und Verschieben ändern alle Versionen mit). Papierkorb: das Original nimmt
+  seine Versionen mit (`trashedBy`) und bringt sie beim Wiederherstellen zurück; ein einzeln gelöschter Durchgang
+  steht im Papierkorb als „Name – Durchgang 2“. Ist das Original endgültig weg, erscheinen die Versionen wieder als
+  eigene Dokumente. „Duplizieren“ macht aus einer Version ein eigenständiges Dokument (ohne `versionOf`).
+- **Sync:** Versionen werden nie als Duplikate zusammengeführt (`mergeDuplicates` in `sync.js`; ein leerer Durchgang
+  kann inhaltsgleich mit einem leeren Original sein). Goodnotes-Kopien in Google Drive nur für das Original.
+
+**Skript ↔ Karteikarten:**
+- **Stapel ↔ Skript:** Stapel → ··· → **Skript zuweisen** (Bibliothek oder im Stapel), oder im Skript Titelmenü →
+  **Karteikarten …** → „Neuer Stapel für dieses Skript“ / „Stapel zuweisen …“. Im Stapel führt ein Knopf mit dem
+  Skriptnamen zum Skript; im Skript zeigt der Knopf mit dem Karten-Symbol (rechts oben, nur wenn Stapel zugewiesen sind)
+  die Stapel. Gespeichert als `deck.script = <id des Originals>` (Versionen teilen sich die Stapel).
+- **Stapel im Skript:** zugewiesene Stapel stehen in der Bibliothek unter der Skript-Kachel, nicht einzeln. Mit dem
+  Filter „Karteikarten“ stehen sie einzeln (ihre Skripte werden dann nicht gezeigt). Die Lernübersicht zeigt sie wie
+  bisher. Wird das Skript gelöscht, bleiben die Stapel und stehen wieder einzeln da.
+- **Karte ↔ Seite:** `card.ref = { n: Seitennummer, page?: Seiten-id im Original }`. Im Karten-Fenster „Seite
+  verknüpfen“ (Nummer eingeben); in der Kartenliste „S. 12“; beim Lernen nach dem Umdrehen **Im Skript zeigen
+  (Seite 12)** – öffnet das Original an der Seite (über die id, sonst die Nummer). Die Lernsitzung endet dabei.
+- **Karte aus Auswahl:** Lasso-Auswahl → **Karteikarte**, oder Screenshot-Werkzeug → **Als Karteikarte**. Der
+  Bereich wird samt Papier/PDF als JPEG (höchstens 1200 px, ≈ 50–150 KB) gezeichnet und kommt auf die Vorderseite;
+  im Karten-Fenster „Auf die Rückseite“ / „Entfernen“. Ziel: der einzige zugewiesene Stapel, sonst Auswahl; ohne
+  Stapel wird „<Skript> – Karteikarten“ angelegt (erst beim Speichern der Karte). Die Seite wird automatisch verknüpft
+  (aus einem Durchgang nur über die Nummer). Bilder: `frontImg` / `backImg = { src, w, h }`; Text-Export „[Bild]“.
+  Bilder machen den Stapel größer (Sync lädt den ganzen Stapel); bei sehr vielen Bild-Karten im Blick behalten.
+
+Getestet im Browser (1180×820 dunkel, 820×1180 hell): Durchgang ohne Handschrift anlegen (Striche weg, Textfelder
+da), Strich im Durchgang ändert das Original nicht, Umschalter, Gruppierung in Raster und Liste, Papierkorb mit
+Rückgängig, Export-Auswahl und Erzeugen von PDF- und Goodnotes-Datei je Version, Karte aus Lasso-Auswahl mit neuem
+Stapel, Bild auf die Rückseite, Lernen → „Im Skript zeigen“. **Nicht getestet:** echtes iPad (Pencil, langes
+Drücken auf Unter-Kacheln, Teilen-Menü mit mehreren Dateien), mehrere Downloads am PC im echten Browser, Sync der
+neuen Felder mit echtem Google Drive.
 
 ## Aufbau
 
@@ -552,6 +608,7 @@ notizen/
   js/cardformat.js  Textformat der Karteikarten: Einlesen, Export, KI-Prompt, Darstellung (Formeln)
   js/inkpad.js    Handschrift auf Karteikarten: Schreibfeld und Anzeige (Notizbuch-Stift-Engine)
   js/learnplan.js Lernübersicht: alle Stapel, heute fällig, Prognose, Aktivität, oft vergessene Karten
+  js/versions.js  Durchgänge (Versionen) eines Notizbuchs, Export mehrerer Versionen, Skript ↔ Karteikarten
   js/store.js     Datenmodell, IndexedDB, Einstellungen
   js/ui.js        Popover, Menüs, Sheets, Dialoge, Toasts
   js/pdf.js       PDF-Import/-Export, Bilder

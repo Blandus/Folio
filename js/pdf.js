@@ -55,16 +55,21 @@ async function renderArea(page, a, s) {
   return c;
 }
 
+// The PDF of a document as a file (several versions are exported together, see versions.js)
+export async function pdfFile(doc, pages = doc.pages) {
+  const bytes = await createPdf({ name: doc.name }, structuredClone(pages), message => toast(message, 0));
+  return new File([bytes], safeName(doc.name) + '.pdf', { type: 'application/pdf' });
+}
+
 let exportingPdf = false;
 export async function exportPdf(doc, pages = doc.pages) {
   if (exportingPdf) return toast('Ein PDF-Export läuft bereits');
   exportingPdf = true;
   try {
-    const snapshot = structuredClone(pages);
-    const bytes = await createPdf({ name: doc.name }, snapshot, message => toast(message, 0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const file = await pdfFile(doc, pages);
+    const url = URL.createObjectURL(file);
     const link = document.createElement('a');
-    link.href = url; link.download = safeName(doc.name) + '.pdf';
+    link.href = url; link.download = file.name;
     document.body.append(link); link.click(); link.remove();
     // Safari needs the URL after the click has returned, especially for large PDFs.
     setTimeout(() => URL.revokeObjectURL(url), 60000);
