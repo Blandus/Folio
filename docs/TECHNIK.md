@@ -45,6 +45,21 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   Fehler sofort auf alle Geräte; wer das Backup in den Sync-Ordner legt oder beim Wiederherstellen überschreibt, holt
   genau das zurück.
 - **Kalender-Feeds sind Nutzereingaben:** private ICS-Adressen nie in Code, Beispieldaten oder Logs.
+- **Import-Zyklen – nichts aus Partnermodulen auf oberster Ebene benutzen:** `editor.js`, `library.js`, `textdoc.js`,
+  `tools.js`, `deck.js`, `inkpad.js` und `learnplan.js` importieren sich gegenseitig (13 Zyklen). Ursachen:
+  `openDoc()` (editor.js) und `renderLibrary()` (library.js) sind die Navigation aller Bildschirme; `editor.js` hält
+  den gemeinsamen Zustand (`ed`, `sc`, `T`, `PALETTE`, `PALETTES`, `saveTools`), den `tools.js`, `inkpad.js` und
+  `library.js` nutzen; Bibliothek, Karteikarten und Lernübersicht öffnen sich gegenseitig. Das funktioniert nur, weil
+  jeder Zugriff auf einen Wert aus einem dieser Partnermodule *in einer Funktion* steht, die erst nach dem Start läuft
+  (Ladereihenfolge: `main.js` → `library.js` → `editor.js` …, `editor.js` ist vor `library.js` fertig). Ein Zugriff auf
+  oberster Ebene (z. B. `const farbe = PALETTE[0];` direkt unter den Imports von `inkpad.js`) bricht den Start mit
+  „Cannot access … before initialization“ ab – leere Seite, je nach Ladereihenfolge im Test unauffällig. Neue
+  Abhängigkeiten zwischen diesen Modulen deshalb nur innerhalb von Funktionen nutzen oder per `await import(...)`
+  laden (wie `deck.js` es teilweise tut). Wer den Aufbau von `T`/`PALETTE` ändert, prüft Notizbuch-Werkzeuge
+  (`tools.js`), Karteikarten-Handschrift (`inkpad.js`) und Einstellungen (`library.js`); `openDoc()` und
+  `renderLibrary()` wie feste Schnittstellen behandeln. Die Zyklen bewusst nicht aufgelöst (wäre ein großer Umbau ohne
+  Nutzen für den Anwender); Übersicht im Wissensgraphen des Betreibers (`Folio/graphify-out/GRAPH_REPORT.md`,
+  Abschnitt Import Cycles; nicht im Repository).
 - **Design-Regeln (ab v72):** Systemschrift; nur die Schriftgrößen 11 · 12 · 13 · 14 · 15 · 16 · 17 · 20 · 22 · 28 · 34 px
   (Kommentar bei `--font` in `style.css`); Dialoge per Wischen schließbar (`swipeToDismiss` in `js/ui.js`), Schließen
   spiegelt das Öffnen; „Bewegung reduzieren“ ersetzt Bewegung durch Überblendungen statt sie abzuschalten.
