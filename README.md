@@ -4,7 +4,7 @@
 
 Folio ist eine kostenlose, browserbasierte Notiz- und Lernanwendung für PC und iPad. Sie verbindet handschriftliche Notizen, PDF-Anmerkungen, Textdokumente, Karteikarten und Kalender in einer gemeinsamen Oberfläche. Inhalte werden zunächst lokal auf dem Gerät gespeichert und lassen sich optional über das eigene Google Drive zwischen Geräten synchronisieren.
 
-**[Folio im Browser öffnen](https://blandus.github.io/Folio/)**
+**[Folio im Browser öffnen](https://blandus.github.io/Folio/](https://folio.blandus.workers.dev )**
 
 ## Die Idee
 
