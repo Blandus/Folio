@@ -44,6 +44,12 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   der Größenprüfung geschrieben; Wiederherstellen nur als Kopie. Der Sync allein verteilt jedes Löschen und jeden
   Fehler sofort auf alle Geräte; wer das Backup in den Sync-Ordner legt oder beim Wiederherstellen überschreibt, holt
   genau das zurück.
+- **Google-Anmeldung über den eigenen Worker** (`server/worker.js`, ab v86, Abschnitt „Anmelde-Server“): eine reine
+  Web-App bekommt von Google nur 1-Stunden-Zugänge, auf dem iPad öffnete sich deshalb immer wieder das
+  Google-Fenster. Der Erneuerungsschlüssel liegt verschlüsselt in einem HttpOnly-Cookie (`Path=/api`), App und
+  `/api` liegen unter **derselben Adresse** (Safari blockiert Cookies fremder Adressen). Hintergrund-Abrufe
+  (`fetchRecord`, `fetchFile`, Sync per Timer) fragen nie interaktiv, damit die App nicht mitten im Arbeiten zu
+  Google springt; nach einem 401 pausieren sie (`drive.needsLogin`). `sw.js` lässt `/api/` nie in den Cache.
 - **Kalender-Feeds sind Nutzereingaben:** private ICS-Adressen nie in Code, Beispieldaten oder Logs.
 - **Import-Zyklen – nichts aus Partnermodulen auf oberster Ebene benutzen:** `editor.js`, `library.js`, `textdoc.js`,
   `tools.js`, `deck.js`, `inkpad.js` und `learnplan.js` importieren sich gegenseitig (13 Zyklen). Ursachen:
@@ -66,6 +72,7 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
 - **Spielregeln:** keine zusätzlichen Server, Proxys oder kostenpflichtigen Dienste ohne Zustimmung des Betreibers;
   externe APIs nur nach aktueller offizieller Dokumentation; keine nicht angefragten Zusatzfunktionen.
   Bei jeder veröffentlichten Änderung `APP_VERSION` (`js/store.js`) und `CACHE` (`sw.js`) erhöhen.
+  Der Anmelde-Worker bei Cloudflare (ab v86) ist vom Betreiber freigegeben (18.11.2026).
 
 ## Starten
 
@@ -81,7 +88,9 @@ powershell -ExecutionPolicy Bypass -File serve.ps1
 **Google-Drive-Sync:** In der Seitenleiste **„Mit Google anmelden“** → Konto wählen → zustimmen. Jeder Nutzer
 synchronisiert in sein **eigenes** Drive (Ordner „Folio“, Berechtigung `drive.file`: nur von Folio angelegte Dateien).
 Ältere Installationen nutzen weiter ihren vorhandenen Drive-Ordner „BadNotes“ bzw. „Notizen-App“ (frühere Namen der
-App); Folio liest alle drei. Nach ~1 Stunde läuft der Zugang ab; der nächste Tipp in der App erneuert ihn still.
+App); Folio liest alle drei. Ab v86 meldet man sich nur einmal an; der Anmelde-Server erneuert den Zugang im
+Hintergrund (Abschnitt **Anmelde-Server**). Bis v85 lief er nach ~1 Stunde ab und der nächste Tipp öffnete das
+Google-Fenster.
 Abmelden unter ⚙. Wie Änderungen von mehreren Geräten zusammengeführt werden: siehe **Synchronisierung und Konflikte**.
 
 Einmalig für den Betreiber (Google Cloud Console, Projekt mit der Client-ID in `js/sync.js`): *Google Drive API*
@@ -89,6 +98,40 @@ aktiviert, OAuth-Client *Webanwendung* mit der GitHub-Pages-Adresse als „Autor
 OAuth-Zustimmungsbildschirm mit Startseite und Datenschutz-Link (`datenschutz.html`) und **veröffentlicht**
 (im Testmodus können sich nur eingetragene Testnutzer anmelden). Für den Kalender zusätzlich die Schritte unter
 **Kalender → Google Kalender einrichten**.
+
+## Anmelde-Server (ab v86)
+Folio läuft als **Cloudflare Worker** (`wrangler.jsonc`): die App-Dateien werden als statische Dateien
+ausgeliefert, nur `/api/*` läuft durch `server/worker.js`. Ablauf nach Googles „OAuth 2.0 for Web Server
+Applications“:
+- `GET /api/login` → Weiterleitung zu Google (`access_type=offline`, `prompt=consent`, `state` als Cookie
+  `folio_state`, 10 Min.). Folio verlässt dafür kurz die App und kommt über `/api/callback` zurück.
+- `GET /api/callback` → Code gegen Zugang + Erneuerungsschlüssel tauschen (mit Client-Secret), Schlüssel
+  AES-GCM-verschlüsselt (`TOKEN_KEY`) als Cookie `folio_rt` (HttpOnly, Secure, SameSite=Strict, `Path=/api`,
+  400 Tage, bei jeder Erneuerung verlängert), zurück zu `/?login=ok` bzw. `/?login=error&reason=…`.
+- `POST /api/token` (Header `X-Folio: 1`, gleiche Herkunft) → `{ access_token, expires_in }`; 401 `signed_out`
+  bzw. `expired` (Google: `invalid_grant`, z. B. widerrufen oder 6 Monate unbenutzt) → neu anmelden.
+- `POST /api/logout` → Widerruf bei Google, Cookie löschen.
+
+Kein Speicher auf dem Server (keine Datenbank). Kalender (`calendar.js`) nutzt weiter sein eigenes
+Google-Fenster (Google Identity Services); Umstellung wäre ein eigener Schritt.
+
+**Einrichtung (Betreiber):** Cloudflare-Konto; Node.js; im Ordner `npx wrangler deploy` oder Workers Builds
+(GitHub-Repository verbinden, Deploy bei Push auf `main`). Secrets: `npx wrangler secret put GOOGLE_CLIENT_SECRET`
+und `TOKEN_KEY` (32 Zufallsbytes, Base64). Lokal: `.dev.vars` mit beiden Werten (nie ins Repository),
+`npx wrangler dev` → http://localhost:8787. Google Cloud Console, OAuth-Client (Webanwendung): Client-Secret;
+autorisierte Weiterleitungs-URIs `https://<worker-adresse>/api/callback` und `http://localhost:8787/api/callback`;
+JavaScript-Quellen um die Worker-Adresse ergänzen (Kalender); Startseite und Datenschutz-Link im
+Zustimmungsbildschirm auf die neue Adresse. Zustimmungsbildschirm muss **veröffentlicht** bleiben (im Testmodus
+laufen Erneuerungsschlüssel nach 7 Tagen ab).
+
+**Umzug von GitHub Pages:** neue Adresse = neuer, leerer Browser-Speicher. Vorher auf jedem Gerät
+synchronisieren; danach die neue Adresse zum Home-Bildschirm hinzufügen und anmelden, Folio lädt alles aus Drive.
+Nur lokal gespeicherte Dinge (Einstellungen, ICS-Abos ohne Sync) neu einrichten.
+
+**Grenzen / ungetestet:** noch nicht mit echtem Cloudflare, echtem Google-Login und echtem iPad geprüft; offen
+vor allem, ob der Sprung zu Google und zurück in der Home-Bildschirm-App sauber funktioniert und ob
+`html_handling: "none"` die Startseite `/` ausliefert. Kostenloser Cloudflare-Tarif: 100.000 Worker-Aufrufe/Tag
+für alle Nutzer zusammen (statische Dateien zählen nicht).
 
 ## Kalender (Woche und Monat)
 Seitenleiste → **Kalender**. Oben **Woche | Monat** (pro Gerät gemerkt, `settings.calView`).
@@ -755,7 +798,9 @@ notizen/
   js/store.js     Datenmodell, IndexedDB, Einstellungen
   js/ui.js        Popover, Menüs, Sheets, Dialoge, Toasts
   js/pdf.js       PDF-Import/-Export, Bilder
-  js/sync.js      Google-Drive-Sync
+  js/sync.js      Google-Drive-Sync, Anmeldung über /api (Worker)
+  server/worker.js  Cloudflare Worker: liefert die App aus, Anmelde-Routen /api/* (nicht Teil der App-Dateien)
+  wrangler.jsonc, .assetsignore   Worker-Einstellungen; .assetsignore: was nicht ausgeliefert wird
   js/backup.js    Backups: täglich in Google Drive (eigener Ordner), ZIP-Datei, Wiederherstellen als Kopie
   js/merge.js     Drei-Wege-Zusammenführung für den Sync (rein, ohne I/O)
   js/offload.js   Speicher optimieren: große Dokumente nur in Google Drive (Hüllen, Nachladen)

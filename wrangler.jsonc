@@ -1,0 +1,23 @@
+// Cloudflare Worker: serves Folio (static files in this folder) and the sign-in routes /api/*
+// (server/worker.js). Deploy: `npx wrangler deploy`, or Workers Builds on push to main.
+// Secrets (never here): GOOGLE_CLIENT_SECRET, TOKEN_KEY → `npx wrangler secret put <NAME>`;
+// locally in `.dev.vars` (not in the repository).
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "folio",
+  "main": "server/worker.js",
+  "compatibility_date": "2026-11-17",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    // like GitHub Pages: /datenschutz.html is served as is. The default would answer 307 → /datenschutz,
+    // and a redirected response breaks navigations through the service worker (sw.js).
+    // To verify on first deploy: "/" still serves index.html.
+    "html_handling": "none",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    // public: identifies the app at Google (also in js/sync.js)
+    "GOOGLE_CLIENT_ID": "498289443227-8pajeudml34vv14m2u7gc6t6li4o0n35.apps.googleusercontent.com"
+  }
+}

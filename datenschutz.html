@@ -17,12 +17,13 @@
 <body>
 <main>
   <h1>Datenschutzerklärung</h1>
-  <div class="sub">Folio – Make space for ideas. · Stand: 26.10.2026</div>
+  <div class="sub">Folio – Make space for ideas. · Stand: 18.11.2026</div>
 
   <h2>Kurz gesagt</h2>
   <p>Folio speichert deine Notizen auf deinem Gerät. Wenn du dich mit Google anmeldest, werden sie zusätzlich in
-  <strong>deinem eigenen Google Drive</strong> gespeichert. Der Betreiber von Folio hat keinen Server, sieht deine
-  Notizen nicht und erhält keine Daten von dir.</p>
+  <strong>deinem eigenen Google Drive</strong> gespeichert. Der Betreiber von Folio sieht deine Notizen nicht. Ein
+  kleiner Anmelde-Dienst des Betreibers (Cloudflare) erneuert nur deine Google-Anmeldung, damit du dich nicht ständig
+  neu anmelden musst; er speichert nichts.</p>
 
   <h2>Verantwortlich</h2>
   <p>Folio (privates, nicht-kommerzielles Projekt)<br>
@@ -36,13 +37,23 @@
   <p>Bei der Anmeldung erteilst du Folio über Google die Berechtigung <code>drive.file</code>: Folio darf damit
   <strong>nur Dateien sehen und bearbeiten, die es selbst angelegt hat</strong> (Ordner „Folio“ und „Folio-Backups“ in deinem Drive), keine anderen
   Dateien. Außerdem liest Folio deinen Namen und deine E-Mail-Adresse, um das angemeldete Konto anzuzeigen; beides bleibt auf
-  deinem Gerät. Die Verbindung läuft direkt zwischen deinem Gerät und Google; es gilt die
+  deinem Gerät. Deine Notizen laufen direkt zwischen deinem Gerät und Google; es gilt die
   <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung von Google</a>.
   Du kannst den Zugriff jederzeit in Folio („Abmelden“) oder unter
   <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a> widerrufen.
   Die Verwendung von Daten aus Google-APIs entspricht der
   <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>
   einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).</p>
+  <p><strong>Anmelde-Dienst:</strong> Die Anmeldung läuft über einen kleinen Dienst des Betreibers bei Cloudflare
+  (Cloudflare Workers, derselbe Dienst liefert auch die App aus). Nach deiner Zustimmung erhält er von Google einen
+  Erneuerungsschlüssel und legt ihn <strong>verschlüsselt in einem Cookie auf deinem Gerät</strong> ab, den Skripte
+  nicht lesen können (<code>folio_rt</code>, gültig bis zu 400 Tage, wird bei Nutzung verlängert). Damit holt Folio
+  im Hintergrund neue Zugänge zu deinem Drive, ohne dass sich jedes Mal ein Google-Fenster öffnet. Der Dienst speichert
+  nichts dauerhaft und sieht deine Notizen nicht; er spricht nur mit Googles Anmeldeschnittstelle. Während der Anmeldung
+  setzt er für zehn Minuten einen zweiten Cookie (<code>folio_state</code>) zum Schutz vor gefälschten Anmeldungen.
+  „Abmelden“ widerruft den Zugriff bei Google und löscht den Cookie. Beim Aufruf verarbeitet Cloudflare technisch
+  bedingt deine IP-Adresse; es gilt die
+  <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Datenschutzerklärung von Cloudflare</a>.</p>
 
   <h2>Kalender</h2>
   <p><strong>Eigene Termine</strong> speichert Folio wie Notizen auf deinem Gerät und – bei Drive-Synchronisation – als
@@ -88,7 +99,7 @@
   Inhalt deiner Karten wird dabei nicht übertragen. Karteikarten und dein Lernfortschritt werden wie deine anderen
   Notizen nur auf deinem Gerät und, falls du dich anmeldest, in deinem Google Drive gespeichert. Den KI-Prompt kopiert
   Folio nur in deine Zwischenablage; Folio selbst sendet nichts an eine KI.
-  Die App wird über GitHub Pages ausgeliefert.</p>
+  Die App wird über Cloudflare Workers ausgeliefert.</p>
 
   <h2>Deine Rechte</h2>
   <p>Du kannst alle Daten jederzeit löschen: in Folio (Papierkorb → endgültig löschen), über die Browser-Einstellungen

@@ -1,0 +1,19 @@
+# Not served as part of the app (Cloudflare Workers static assets, .gitignore syntax)
+.assetsignore
+wrangler.jsonc
+server/
+node_modules/
+.wrangler/
+.dev.vars*
+.env*
+.git/
+.gitignore
+.github/
+docs/
+graphify-out/
+README.md
+AGENTS.md
+CLAUDE.md
+__rec.json
+package.json
+package-lock.json

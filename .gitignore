@@ -1,2 +1,7 @@
 # graphify cache/output (knowledge graph, built locally; never published)
 graphify-out/
+
+# Cloudflare Worker (lokal)
+.dev.vars*
+.wrangler/
+node_modules/

@@ -20,7 +20,7 @@ export function configureSync(opts) {
 
 // One record straight from Drive (for documents kept only there, see offload.js).
 async function fetchRecord(id) {
-  await getToken(true);
+  await getToken(false);
   const folders = await findFolders();
   const f = pickNewest(await listFiles(`name='${id}.json' and ${inFolders(folders)} and trashed=false`)).byId.get(id);
   return f ? migrate(await (await gapi(`files/${f.id}?alt=media`)).json()) : null;
@@ -46,59 +46,67 @@ function syncError(err) {
 }
 
 // ---------- Sign-in ----------
-// One OAuth client for everyone: it only identifies the app (allowed origin: the GitHub Pages
-// site). Each person signs in with their own Google account and Folio gets a token for *their*
-// Drive, limited to files Folio itself created (drive.file). No server; tokens last ~1 hour.
+// Folio is served by a Cloudflare Worker (server/worker.js, ab v86). "Mit Google anmelden" goes
+// to /api/login once (Google's consent page, then back to /?login=ok). From then on the Worker
+// keeps the refresh token (encrypted, in a cookie scripts cannot read) and /api/token hands out
+// fresh ~1-hour tokens in the background: no Google window, no tap needed. Each person still
+// syncs into *their own* Drive, limited to files Folio created (drive.file).
 // settings.driveUsed = signed in on this device; settings.account = { email, name }.
+// CLIENT_ID: the app's public OAuth client id, also used by the calendar's own sign-in (calendar.js).
 export const CLIENT_ID = '498289443227-8pajeudml34vv14m2u7gc6t6li4o0n35.apps.googleusercontent.com';
-const clientId = () => CLIENT_ID;
 export const signedIn = () => !!settings.driveUsed;
 
+// A fresh token from the Worker. 401 = no (valid) sign-in on this device: background syncs stop
+// (drive.needsLogin) until a tap; with `interactive` that tap goes to Google's sign-in page.
+let pendingToken = null;
 function getToken(interactive) {
-  return new Promise((res, rej) => {
-    if (tokenValid()) return res(drive.token);
-    if (!interactive) return rej(new Error('Zum Verbinden antippen'));
-    if (!window.google?.accounts?.oauth2) return rej(new Error('Google-Login nicht geladen (offline?)'));
-    const tc = google.accounts.oauth2.initTokenClient({
-      client_id: clientId(),
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      ...(settings.account?.email ? { login_hint: settings.account.email } : {}),
-      callback: r => {
-        if (r.error) return rej(new Error(r.error));
-        drive.token = r.access_token;
-        drive.exp = Date.now() + r.expires_in * 1000;
-        res(drive.token);
-      },
-      error_callback: err => rej(new Error(err.message || err.type)),
-    });
-    tc.requestAccessToken({ prompt: settings.driveUsed ? '' : 'consent' });
+  if (tokenValid()) return Promise.resolve(drive.token);
+  if (drive.needsLogin && !interactive) return Promise.reject(new Error('Drive 401'));
+  pendingToken ||= (async () => {
+    const r = await fetch('/api/token', { method: 'POST', headers: { 'X-Folio': '1' } }); // offline → "Failed to fetch"
+    if (r.status === 401) { drive.needsLogin = true; throw new Error('Drive 401'); }
+    if (!r.ok) throw new Error('Drive 503'); // Worker or Google not answering
+    const t = await r.json();
+    drive.token = t.access_token;
+    drive.exp = Date.now() + t.expires_in * 1000;
+    drive.needsLogin = false;
+    return drive.token;
+  })().finally(() => { pendingToken = null; });
+  return pendingToken.catch(err => {
+    if (interactive && drive.needsLogin) signIn();
+    throw err;
   });
 }
 
-// "Mit Google anmelden": consent once, remember the account, sync right away.
-export async function signIn() {
-  try {
-    await getToken(true);
-    settings.driveUsed = true;
-    const about = await (await gapi('about?fields=user(emailAddress,displayName)')).json();
-    settings.account = { email: about.user?.emailAddress || '', name: about.user?.displayName || '' };
-    saveSettings(); emit('account');
-    await sync(false);
-  } catch (err) { setStatus('⚠ ' + syncError(err)); }
+// "Mit Google anmelden": leaves the app for Google's sign-in page; Folio reloads afterwards.
+export function signIn() {
+  location.assign('/api/login' + (settings.account?.email ? '?hint=' + encodeURIComponent(settings.account.email) : ''));
 }
 export function signOut() {
-  if (drive.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(drive.token, () => {});
-  drive.token = null; drive.exp = 0;
+  fetch('/api/logout', { method: 'POST', headers: { 'X-Folio': '1' } }).catch(() => {});
+  drive.token = null; drive.exp = 0; drive.needsLogin = false;
   settings.driveUsed = false; settings.account = null; settings.syncStatus = '';
   saveSettings(); emit('account'); setStatus('');
 }
-// After the ~1 h token expires, the next tap anywhere renews it (Google needs a user gesture for
-// its sign-in window; with consent already given it closes by itself) and syncs.
-document.addEventListener('click', () => {
-  if (!signedIn() || tokenValid() || drive.busy || drive.renewing) return;
-  drive.renewing = true;
-  getToken(true).then(() => sync(false)).catch(() => {}).finally(() => { drive.renewing = false; });
-}, true);
+
+// Back from Google (/?login=ok or /?login=error&reason=…): clean the address, then sync.
+{
+  const q = new URLSearchParams(location.search);
+  const result = q.get('login');
+  if (result) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    if (result === 'ok') {
+      settings.driveUsed = true; settings.account = null; // the first sync looks the account up
+      saveSettings();
+    } else {
+      const reason = q.get('reason') || '';
+      const msg = reason === 'access_denied'
+        ? 'Anmeldung abgebrochen – erneut auf „Mit Google anmelden“ tippen'
+        : `Google-Anmeldung fehlgeschlagen (${reason || 'unbekannt'}) – bitte erneut versuchen`;
+      setTimeout(() => import('./ui.js').then(m => m.toast(msg, 8000)).catch(() => {}), 500);
+    }
+  }
+}
 
 async function gapi(path, opts = {}) {
   const url = path.startsWith('http') ? path : 'https://www.googleapis.com/drive/v3/' + path;
@@ -221,7 +229,7 @@ async function ensureFilesUploaded(rec, folders) {
 }
 // The bytes of a PDF file from Drive (pages of a document imported on another device).
 async function fetchFile(id) {
-  await getToken(false).catch(() => getToken(true));
+  await getToken(false); // never leave the app for Google from here (PDF pages load in the background)
   const folders = appFolders || await findFolders();
   const f = await driveFileFor(id, folders);
   if (!f) return null;
@@ -477,10 +485,14 @@ export async function sync(interactive) {
 }
 
 let syncT;
+// Background syncs renew the token themselves (getToken); they pause while offline or while this
+// device has to sign in again (needsLogin), so a signed-out device does not ask the Worker every 30 s.
+const canAutoSync = () => signedIn() && !drive.needsLogin && navigator.onLine;
 export function scheduleSync() {
-  if (!tokenValid()) return;
+  if (!canAutoSync()) return;
   clearTimeout(syncT);
   syncT = setTimeout(() => sync(false), 3000);
 }
-setInterval(() => { if (document.visibilityState === 'visible' && tokenValid()) sync(false); }, 30000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && tokenValid()) sync(false); });
+setInterval(() => { if (document.visibilityState === 'visible' && canAutoSync()) sync(false); }, 30000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && canAutoSync()) sync(false); });
+setTimeout(() => { if (canAutoSync()) sync(false); }, 1500); // on start (and right after signing in)

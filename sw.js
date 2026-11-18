@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Network first, so updates arrive as soon as you're online.
-const CACHE = 'folio-v85';
+const CACHE = 'folio-v86';
 const ASSETS = [
   './', 'index.html', 'style.css', 'manifest.json', 'folio-mark.svg', 'favicon.png', 'logo.png', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png',
   'js/main.js', 'js/util.js', 'js/icons.js', 'js/store.js', 'js/render.js', 'js/ink.js', 'js/handwriting.js', 'js/ui.js',
@@ -34,12 +34,13 @@ self.addEventListener('activate', e => e.waitUntil(
 
 // Only the app itself and its libraries are cached. Everything else — Google sign-in and APIs
 // (Drive, Calendar), calendar feeds (.ics) and any other address — always goes straight to the
-// network and is never stored here.
+// network and is never stored here. The same holds for Folio's own sign-in routes (/api/…, Worker).
 const LIB_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
   if (url.origin !== self.location.origin && !LIB_HOSTS.includes(url.hostname)) return;
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
   e.respondWith(
     fetch(fresh(e.request))
       .then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
