@@ -32,6 +32,9 @@ export default {
         case 'POST /api/logout': return await logout(request, env);
       }
       if (url.pathname.startsWith('/api/')) return json({ error: 'not_found' }, 404);
+      // html_handling "none" (wrangler.jsonc) serves files only by their exact name, so the start
+      // page "/" (also "/?login=ok") is answered with index.html here.
+      if (url.pathname === '/') return env.ASSETS.fetch(new Request(new URL('/index.html', url), { headers: request.headers }));
       return env.ASSETS.fetch(request);
     } catch (err) {
       return json({ error: 'server', message: String(err?.message || err) }, 500);

@@ -12,9 +12,9 @@
     "binding": "ASSETS",
     // like GitHub Pages: /datenschutz.html is served as is. The default would answer 307 → /datenschutz,
     // and a redirected response breaks navigations through the service worker (sw.js).
-    // To verify on first deploy: "/" still serves index.html.
+    // With "none", "/" is not mapped to index.html: the Worker does that (run_worker_first "/").
     "html_handling": "none",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/"]
   },
   "vars": {
     // public: identifies the app at Google (also in js/sync.js)

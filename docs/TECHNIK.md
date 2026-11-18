@@ -130,7 +130,7 @@ Nur lokal gespeicherte Dinge (Einstellungen, ICS-Abos ohne Sync) neu einrichten.
 
 **Grenzen / ungetestet:** noch nicht mit echtem Cloudflare, echtem Google-Login und echtem iPad geprüft; offen
 vor allem, ob der Sprung zu Google und zurück in der Home-Bildschirm-App sauber funktioniert und ob
-`html_handling: "none"` die Startseite `/` ausliefert. Kostenloser Cloudflare-Tarif: 100.000 Worker-Aufrufe/Tag
+der Worker die Startseite `/` richtig ausliefert (`html_handling: "none"` liefert `/` nicht selbst aus, deshalb leitet der Worker `/` auf `index.html` um). Kostenloser Cloudflare-Tarif: 100.000 Worker-Aufrufe/Tag
 für alle Nutzer zusammen (statische Dateien zählen nicht).
 
 ## Kalender (Woche und Monat)
