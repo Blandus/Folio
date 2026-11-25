@@ -3,96 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Folio – Datenschutz</title>
-<link rel="icon" type="image/svg+xml" href="folio-mark.svg">
+<title>Folio ist umgezogen</title>
+<!-- Folio läuft nur noch unter https://folio.blandus.workers.dev (Cloudflare). Diese Seite (auch als 404.html und
+     datenschutz.html) leitet jede alte GitHub-Pages-Adresse dorthin weiter, Pfad eingeschlossen. -->
+<meta http-equiv="refresh" content="0; url=https://folio.blandus.workers.dev/">
+<script>
+  var p = location.pathname.replace(/^\/Folio(\/|$)/, '/');
+  if (p === '/index.html') p = '/';
+  location.replace('https://folio.blandus.workers.dev' + p + location.search + location.hash);
+</script>
 <style>
   body { margin: 0; background: #FAF9F5; color: #0F2747; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 720px; margin: 0 auto; padding: 48px 24px 64px; }
-  h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 18px; margin: 28px 0 6px; }
-  .sub { color: rgba(15, 39, 71, .6); margin-bottom: 24px; }
-  a { color: #3E6E9F; }
-  @media (prefers-color-scheme: dark) { body { background: #111A26; color: #EEEAE2; } .sub { color: rgba(238, 234, 226, .6); } a { color: #8FB4DD; } }
+  main { max-width: 560px; margin: 0 auto; padding: 64px 24px; }
+  a { color: inherit; }
+  @media (prefers-color-scheme: dark) { body { background: #14161A; color: #E8E6E1; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>Datenschutzerklärung</h1>
-  <div class="sub">Folio – Make space for ideas. · Stand: 26.10.2026</div>
-
-  <h2>Kurz gesagt</h2>
-  <p>Folio speichert deine Notizen auf deinem Gerät. Wenn du dich mit Google anmeldest, werden sie zusätzlich in
-  <strong>deinem eigenen Google Drive</strong> gespeichert. Der Betreiber von Folio hat keinen Server, sieht deine
-  Notizen nicht und erhält keine Daten von dir.</p>
-
-  <h2>Verantwortlich</h2>
-  <p>Folio (privates, nicht-kommerzielles Projekt)<br>
-  Kontakt: <a href="mailto:blandus.business@gmx.de">blandus.business@gmx.de</a></p>
-
-  <h2>Daten auf deinem Gerät</h2>
-  <p>Notizbücher, Textdokumente, Ordner, Termine und Einstellungen liegen im Speicher deines Browsers (IndexedDB, localStorage).
-  Sie verlassen dein Gerät nur, wenn du die Google-Drive-Synchronisation nutzt oder selbst etwas exportierst.</p>
-
-  <h2>Anmeldung mit Google und Google Drive</h2>
-  <p>Bei der Anmeldung erteilst du Folio über Google die Berechtigung <code>drive.file</code>: Folio darf damit
-  <strong>nur Dateien sehen und bearbeiten, die es selbst angelegt hat</strong> (Ordner „Folio“ und „Folio-Backups“ in deinem Drive), keine anderen
-  Dateien. Außerdem liest Folio deinen Namen und deine E-Mail-Adresse, um das angemeldete Konto anzuzeigen; beides bleibt auf
-  deinem Gerät. Die Verbindung läuft direkt zwischen deinem Gerät und Google; es gilt die
-  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Datenschutzerklärung von Google</a>.
-  Du kannst den Zugriff jederzeit in Folio („Abmelden“) oder unter
-  <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a> widerrufen.
-  Die Verwendung von Daten aus Google-APIs entspricht der
-  <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>
-  einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).</p>
-
-  <h2>Kalender</h2>
-  <p><strong>Eigene Termine</strong> speichert Folio wie Notizen auf deinem Gerät und – bei Drive-Synchronisation – als
-  Dateien im Ordner „Folio“ in deinem Google Drive. <strong>Kalender-Abos</strong> (ICS-Adresse) ruft Folio nur auf
-  deinen Tipp direkt von deinem Gerät beim jeweiligen Kalender-Anbieter ab; dabei erhält dieser Anbieter technisch
-  bedingt deine IP-Adresse. Die Adresse des Abos und die abgerufenen bzw. importierten Termine werden wie deine
-  anderen Daten gespeichert (Gerät und, mit Sync, dein Drive). Behandle die Adresse eines privaten Kalenders wie ein
-  Passwort.</p>
-  <p><strong>Google Kalender</strong> ist optional und braucht eine eigene Zustimmung, unabhängig von Google Drive.
-  Folio erhält dann die Berechtigungen <code>calendar.calendarlist.readonly</code> (Liste deiner Kalender lesen) und
-  <code>calendar.events</code> (Termine anzeigen, anlegen, ändern und löschen). Folio liest nur die Termine der
-  gerade angezeigten Woche und ändert nur, was du in Folio selbst änderst. Der Zugangsschlüssel und die
-  Google-Termine bleiben nur im Arbeitsspeicher der geöffneten App; sie werden weder dauerhaft gespeichert noch
-  zwischengespeichert (auch nicht im Offline-Speicher der App) und nicht an den Betreiber übertragen. Gespeichert wird
-  auf deinem Gerät nur, welche Kalender du eingeblendet hast und welcher Kalender Ziel für neue Termine ist.
-  „Trennen“ in Folio oder <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>
-  widerruft den Zugriff.</p>
-
-  <h2>Importierte PDFs</h2>
-  <p>Importierte PDFs speichert Folio als Original-Datei auf deinem Gerät und – bei Drive-Synchronisation – einmal als
-  Datei im Ordner „Folio“ in deinem Google Drive, damit deine anderen Geräte sie anzeigen können.</p>
-
-  <h2>Synchronisierung</h2>
-  <p>Für das Zusammenführen von Änderungen mehrerer Geräte merkt sich Folio auf jedem Gerät den zuletzt
-  synchronisierten Stand jedes Dokuments (nur lokal, wird nicht hochgeladen). Mit „Große Dokumente nur in Google
-  Drive“ bleiben große Dokumente nur in deinem Drive; auf dem Gerät liegt dann nur eine kleine Vorschau, und das
-  Dokument wird beim Öffnen direkt von deinem Drive geladen.</p>
-
-  <h2>Backups</h2>
-  <p>Mit Google-Anmeldung legt Folio einmal am Tag ein Backup deiner Notizen, Dokumente, Karteikarten, Termine und
-  PDFs im Ordner „Folio-Backups“ in deinem Google Drive ab (abschaltbar unter Einstellungen → Backup). Ältere Backups
-  löscht Folio nach 12 Monaten (in den Drive-Papierkorb). „Als Datei sichern“ erstellt eine ZIP-Datei mit denselben
-  Daten, die nur auf deinem Gerät entsteht und die du selbst speicherst oder teilst. Beides enthält auch die Adressen
-  deiner Kalender-Abos.</p>
-
-  <h2>Externe Dienste beim Laden der App</h2>
-  <p>Beim Öffnen lädt Folio Programmbibliotheken von Drittanbietern (cdnjs.cloudflare.com, cdn.jsdelivr.net,
-  accounts.google.com). Dabei wird technisch bedingt deine IP-Adresse an diese Anbieter übermittelt.
-  Schaltest du „Handschrift erkennen (Beta)“ ein, lädt Folio einmalig das Erkennungsmodell von huggingface.co und die
-  Laufzeit ONNX Runtime von cdn.jsdelivr.net; die Erkennung selbst läuft vollständig auf deinem Gerät, deine Notizen
-  und der erkannte Text werden nicht übertragen.
-  Enthält eine Karteikarte eine Formel, lädt Folio dafür einmal die Formel-Bibliothek KaTeX von cdn.jsdelivr.net; der
-  Inhalt deiner Karten wird dabei nicht übertragen. Karteikarten und dein Lernfortschritt werden wie deine anderen
-  Notizen nur auf deinem Gerät und, falls du dich anmeldest, in deinem Google Drive gespeichert. Den KI-Prompt kopiert
-  Folio nur in deine Zwischenablage; Folio selbst sendet nichts an eine KI.
-  Die App wird über GitHub Pages ausgeliefert.</p>
-
-  <h2>Deine Rechte</h2>
-  <p>Du kannst alle Daten jederzeit löschen: in Folio (Papierkorb → endgültig löschen), über die Browser-Einstellungen
-  (Websitedaten) und in Google Drive (Ordner „Folio“ und „Folio-Backups“).</p>
+  <h1>Folio ist umgezogen</h1>
+  <p>Folio läuft jetzt unter <a href="https://folio.blandus.workers.dev/">folio.blandus.workers.dev</a>.
+    Bitte diese Adresse neu zum Home-Bildschirm hinzufügen.</p>
 </main>
 </body>
 </html>

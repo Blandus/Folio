@@ -2,65 +2,28 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Folio">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-<meta name="description" content="Folio – Make space for ideas. Handschrift, PDFs und Textdokumente.">
-<title>Folio</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/png" href="favicon.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="style.css">
-<link rel="icon" type="image/svg+xml" href="folio-mark.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio ist umgezogen</title>
+<!-- Folio läuft nur noch unter https://folio.blandus.workers.dev (Cloudflare). Diese Seite (auch als 404.html und
+     datenschutz.html) leitet jede alte GitHub-Pages-Adresse dorthin weiter, Pfad eingeschlossen. -->
+<meta http-equiv="refresh" content="0; url=https://folio.blandus.workers.dev/">
+<script>
+  var p = location.pathname.replace(/^\/Folio(\/|$)/, '/');
+  if (p === '/index.html') p = '/';
+  location.replace('https://folio.blandus.workers.dev' + p + location.search + location.hash);
+</script>
+<style>
+  body { margin: 0; background: #FAF9F5; color: #0F2747; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 64px 24px; }
+  a { color: inherit; }
+  @media (prefers-color-scheme: dark) { body { background: #14161A; color: #E8E6E1; } }
+</style>
 </head>
 <body>
-
-<section id="library" class="view">
-  <aside id="sidebar" class="sidebar"></aside>
-  <main class="lib-main">
-    <header id="libHead" class="lib-head"></header>
-    <div id="libContent" class="lib-content"></div>
-  </main>
-</section>
-
-<section id="editor" class="view" hidden>
-  <div class="tabbar" id="tabbar" hidden><div id="tabs" class="tabs"></div></div>
-  <!-- header: navigation, the tools (drawing · content · presentation), document actions -->
-  <div class="toolbar">
-    <div class="tb-group" id="tbLeft"></div>
-    <div class="tb-tools" id="tbTools"></div>
-    <div class="tb-group right"><div class="tb-group-inner" id="tbRight"></div></div>
-  </div>
-  <div class="ed-body">
-    <aside id="thumbs" class="thumbs" hidden></aside>
-    <div class="stage">
-      <div id="scroller"><div id="pages"></div></div>
-      <canvas id="ink"></canvas>
-      <canvas id="overlay"></canvas>
-      <!-- tool details (variants, colours, widths): own bar, docked top (horizontal) or left/right (vertical) -->
-      <div id="optdock" class="optdock">
-        <div class="optdock-grip" title="Leiste verschieben – an den Rand ziehen zum Andocken" aria-label="Leiste verschieben"></div>
-        <div id="optbar" class="opt-pill"></div>
-      </div>
-      <div id="undoPill" class="float-pill undo-pill undo-group"></div>
-      <div id="pageInd" class="float-pill page-pill"></div>
-      <div id="zoomPill" class="float-pill zoom-pill"></div>
-    </div>
-    <aside id="searchPanel" class="side-panel" hidden></aside>
-  </div>
-</section>
-
-<section id="textdoc" class="view textdoc-view" hidden></section>
-
-<section id="deck" class="view deck-view" hidden></section>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async></script>
-<script type="module" src="js/main.js"></script>
+<main>
+  <h1>Folio ist umgezogen</h1>
+  <p>Folio läuft jetzt unter <a href="https://folio.blandus.workers.dev/">folio.blandus.workers.dev</a>.
+    Bitte diese Adresse neu zum Home-Bildschirm hinzufügen.</p>
+</main>
 </body>
 </html>

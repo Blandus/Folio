@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio ist umgezogen</title>
+<!-- Folio läuft nur noch unter https://folio.blandus.workers.dev (Cloudflare). Diese Seite (auch als 404.html und
+     datenschutz.html) leitet jede alte GitHub-Pages-Adresse dorthin weiter, Pfad eingeschlossen. -->
+<meta http-equiv="refresh" content="0; url=https://folio.blandus.workers.dev/">
+<script>
+  var p = location.pathname.replace(/^\/Folio(\/|$)/, '/');
+  if (p === '/index.html') p = '/';
+  location.replace('https://folio.blandus.workers.dev' + p + location.search + location.hash);
+</script>
+<style>
+  body { margin: 0; background: #FAF9F5; color: #0F2747; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 64px 24px; }
+  a { color: inherit; }
+  @media (prefers-color-scheme: dark) { body { background: #14161A; color: #E8E6E1; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Folio ist umgezogen</h1>
+  <p>Folio läuft jetzt unter <a href="https://folio.blandus.workers.dev/">folio.blandus.workers.dev</a>.
+    Bitte diese Adresse neu zum Home-Bildschirm hinzufügen.</p>
+</main>
+</body>
+</html>
