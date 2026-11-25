@@ -71,6 +71,21 @@ export function initTools() {
 // Time of the last pen activity: touches shortly after it are the writing hand, not gestures.
 let lastPen = 0;
 const palmLikely = () => (drawing && !drawing.touch) || performance.now() - lastPen < 600;
+// The writing hand usually lands before the pencil and stays on the glass between words, longer
+// than palmLikely() covers. Every touch that is on the screen while the pencil touches down or
+// writes is the hand: it is ignored for scrolling, zooming and taps until it is lifted.
+function markPalm() {
+  let changed = false;
+  for (const p of touches.values()) if (!p.palm) { p.palm = true; changed = true; }
+  if (!changed) return;
+  cancelPress(); tap = null;
+  startGesture();
+}
+// Fingers that may scroll and zoom (all touches except the resting hand).
+const fingers = () => [...touches.values()].filter(p => !p.palm);
+// A gesture moves the page only after the fingers moved this far (CSS px): a hand settling onto
+// the glass shifts and rolls a few pixels, which used to drag the page away just before writing.
+const GESTURE_SLOP = 12;
 
 // pixels per page unit while drawing; percentages of a page box for overlays (infinite pages have their own size and origin)
 const ppu = d => d.rect.width / pageW(d.page);
@@ -253,7 +268,7 @@ function onDown(e) {
   if (handle && !drawing) return startVertexDrag(e, handle);
   hideShapeHandles();
   if (e.pointerType === 'touch') {
-    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, palm: palmLikely() });
     // A hand resting while (or right after) writing must not tap, scroll or zoom.
     tap = touches.size === 1 && !palmLikely() ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
     if (settings.fingerDraw && touches.size === 1 && !drawing) return start(e);
@@ -263,7 +278,7 @@ function onDown(e) {
     watchPress(e);
     return;
   }
-  if (e.pointerType === 'pen') lastPen = performance.now();
+  if (e.pointerType === 'pen') { lastPen = performance.now(); markPalm(); }
   // A new pencil contact while the previous stroke never got its "up": keep that stroke.
   if (drawing && !drawing.touch && e.pointerType === 'pen' && drawing.id !== e.pointerId) finish(true);
   if (e.button !== 0 || drawing) return;
@@ -303,7 +318,7 @@ function onMove(e) {
   if (drawing && e.pointerId === drawing.id) {
     const at = performance.now();
     e.preventDefault();
-    if (e.pointerType === 'pen') lastPen = performance.now();
+    if (e.pointerType === 'pen') { lastPen = performance.now(); if (touches.size) markPalm(); }
     let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
     if (!evs.length) evs = [e];
     const d = drawing;
@@ -366,14 +381,23 @@ function onMove(e) {
   }
   if (press?.id === e.pointerId && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancelPress();
   if ((e.pointerType === 'touch' || ed.reading) && touches.has(e.pointerId) && gesture) {
-    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const t = touches.get(e.pointerId);
+    t.x = e.clientX; t.y = e.clientY;
+    if (t.palm) return; // resting hand (see markPalm)
     if (palmLikely()) { startGesture(); return; } // resting hand: don't move the page under the pen
     const g = gestureState();
+    if (!gesture.live) {
+      // not yet: a settling hand must not move the page (GESTURE_SLOP)
+      if (Math.hypot(g.cx - gesture.cx, g.cy - gesture.cy) < GESTURE_SLOP && Math.abs(g.d - gesture.d) < GESTURE_SLOP) return;
+      Object.assign(gesture, g, { live: true, zoom: ed.zoom });
+      return;
+    }
+    const n = fingers().length;
     sc.scrollLeft -= g.cx - gesture.cx;
     sc.scrollTop -= g.cy - gesture.cy;
     gesture.cx = g.cx; gesture.cy = g.cy;
-    if (touches.size > 1 && gesture.d > 0) setZoom(gesture.zoom * g.d / gesture.d, g.cx, g.cy);
-    if (touches.size === 1 && !gesture.pinched) sampleScroll(gesture);
+    if (n > 1 && gesture.d > 0) setZoom(gesture.zoom * g.d / gesture.d, g.cx, g.cy);
+    if (n === 1 && !gesture.pinched) sampleScroll(gesture);
   } else if (e.pointerType !== 'touch' && ed.tool === 'eraser' && e.target.closest?.('.page')) {
     hoverCursor = [e.clientX, e.clientY]; drawOverlay();
   }
@@ -382,7 +406,8 @@ let hoverCursor = null;
 
 function onUp(e, ok) {
   if (press?.id === e.pointerId) cancelPress();
-  const released = ok && touches.has(e.pointerId) && touches.size === 1 && !drawing ? gesture : null;
+  const t = touches.get(e.pointerId);
+  const released = ok && t && !t.palm && touches.size === 1 && !drawing && gesture?.live ? gesture : null;
   if (e.pointerType === 'pen') lastPen = performance.now();
   // Safari cancels the pencil's pointer when it thinks the palm started a gesture; the ink
   // drawn up to that point is real, so a cancelled pen stroke is kept, not thrown away.
@@ -690,7 +715,7 @@ async function screenshot(d) {
 
 // ---------- Gestures ----------
 function gestureState() {
-  const pts = [...touches.values()];
+  const pts = fingers();
   const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
   const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
   const d = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
@@ -698,8 +723,9 @@ function gestureState() {
 }
 function startGesture() {
   // Once a second finger joins, suppress inertia until the whole pinch gesture ends.
-  const pinched = touches.size > 1 || !!gesture?.pinched;
-  gesture = touches.size ? { ...gestureState(), zoom: ed.zoom, pinched, samples: [] } : null;
+  const n = fingers().length;
+  const pinched = n > 1 || !!gesture?.pinched;
+  gesture = n ? { ...gestureState(), zoom: ed.zoom, pinched, samples: [] } : null;
   if (gesture) sampleScroll(gesture);
 }
 

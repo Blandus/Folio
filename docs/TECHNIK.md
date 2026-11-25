@@ -19,6 +19,11 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   fokussiertem Textfeld (Taste „Tastatur ausblenden“).
 - **Schwungscrollen** im Notizbuch (`js/tools.js`, Momentum über `sc.scrollLeft/scrollTop`): eigene Umsetzung, weil
   das Scrollen per Finger selbst gesteuert wird (`touch-action: none`, Stift zeichnet).
+- **Handballen verschiebt die Seite nicht** (`js/tools.js`, `markPalm`, `GESTURE_SLOP`): Jede Berührung, die beim
+  Aufsetzen oder Schreiben des Stifts (oder bis 600 ms danach) auf dem Glas liegt, gilt als Hand und scrollt, zoomt
+  und tippt nicht, bis sie abgehoben wird. Außerdem bewegt eine Fingergeste die Seite erst nach 12 px Weg. Vorher
+  schob die aufgelegte Hand die Seite weg, bevor der Stift aufsetzte, und nach 600 ms Schreibpause wieder.
+  Im Browser mit simulierten Zeigern geprüft, nicht auf dem echten iPad.
 - **Zahleneingabe für Werkzeugstärken** (Stärke noch einmal antippen → Zahl in mm): ausdrücklicher Nutzerwunsch.
 - **Importierte PDFs bleiben Original-PDFs** (`js/pdfdoc.js`, ab v50): Seiten verweisen auf die Datei und werden erst
   beim Anzeigen gerendert. Seiten als Bilder zu speichern sprengte auf dem iPad den Speicher (450-Seiten-Buch ≈ 100 MB
