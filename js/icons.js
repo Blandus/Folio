@@ -41,6 +41,7 @@ const P = {
   lasso: '<path d="M12 4c5 0 8.5 2.4 8.5 5.5S17 15 12 15c-1.2 0-2.4-.2-3.4-.4" stroke-dasharray="2.4 2.6"/><path d="M8.3 14.4C5.3 13.5 3.5 11.7 3.5 9.5 3.5 6.4 7 4 12 4"/><path d="M6.8 14.3c-.9 1.6-.1 3.1 1.3 3.4 1.5.4 1.8 1.7.9 2.8"/>',
   image: '<rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M3.5 17l4.6-4.6a1.4 1.4 0 0 1 2 0l3 3 1.6-1.6a1.4 1.4 0 0 1 2 0l3.8 3.8"/>',
   text: '<path d="M5.5 7.5V5h13v2.5M12 5v14M9.5 19h5"/>',
+  keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2.6"/><path d="M6.3 9.6h.01M9.4 9.6h.01M12.5 9.6h.01M15.6 9.6h.01M17.8 9.6h.01M7.4 12.2h.01M10.5 12.2h.01M13.6 12.2h.01M16.7 12.2h.01M8.5 14.8h7"/>',
   // a glowing point that moves, with speed lines (the old rays read as Apple's brightness symbol,
   // a ring with a line as a magnifying glass)
   laser: '<circle cx="15.5" cy="8.5" r="5" fill="currentColor" opacity=".22" stroke="none"/><circle cx="15.5" cy="8.5" r="2.6" fill="currentColor" stroke="none"/><path d="M4 15l5-5M5.5 20.5l7-7M10.5 21l4-4"/>',

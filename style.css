@@ -730,6 +730,13 @@ svg { display: block; flex: none; }
 .thumb-item.active .thumb-frame { outline: 2px solid var(--accent); outline-offset: 2px; }
 .thumb-item.active .thumb-num { color: var(--accent); font-weight: 600; }
 .thumb-bm { position: absolute; top: -2px; right: 6px; color: var(--sage); }
+/* reordering: long press lifts a page (editor.js, thumbPress) */
+.thumb-item { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.thumb-item.thumb-placeholder { opacity: .3; }
+.thumb-ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; transform-origin: 50% 40%; transform: scale(1.04);
+  transition: none; }
+.thumb-ghost .thumb-frame { box-shadow: 0 10px 28px rgba(0, 0, 0, .22), 0 2px 6px rgba(0, 0, 0, .12); }
+.thumb-ghost-img { width: 100%; display: block; }
 
 .stage { flex: 1; position: relative; min-width: 0; }
 #scroller { position: absolute; inset: 0; overflow: auto; touch-action: none; -webkit-overflow-scrolling: touch; }
@@ -802,6 +809,32 @@ canvas.live-tip { z-index: 3; }
   background: transparent; resize: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; z-index: 2;
   -webkit-user-select: text; user-select: text; min-height: 1em; caret-color: var(--accent);
 }
+
+/* Tipp-Modus (typing.js): lies exactly over the typed text of the page; sizes, line height,
+   indents and the shift that puts each baseline on the paper's line are set per line in JS */
+.flow-editor {
+  position: absolute; margin: 0; padding: 0; border: 0; outline: none; background: transparent; z-index: 2;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; line-break: auto; hyphens: manual;
+  -webkit-user-select: text; user-select: text; caret-color: var(--accent); cursor: text;
+  font-kerning: normal; font-variant-ligatures: normal; text-rendering: auto; -webkit-text-size-adjust: none;
+}
+.flow-editor > div { position: relative; margin: 0; padding-top: 0; padding-bottom: 0; }
+.flow-editor > div[data-type="blockquote"] { color: var(--flow-quote); }
+.flow-editor > div[data-type="blockquote"]::after {
+  content: ""; position: absolute; left: 2px; width: 3px; top: var(--qt); bottom: var(--qb); background: var(--flow-bar);
+}
+.flow-editor > div[data-mark]::before {
+  content: attr(data-mark); position: absolute; top: 0; left: var(--mx); width: var(--mw); text-align: center; font-weight: 400;
+}
+.flow-editor > div[data-list="decimal"]::before { width: calc(var(--mw) * .8); text-align: right; }
+.flow-editor > div[data-list="todo"]::before {
+  content: ""; position: absolute; left: var(--bl); top: var(--bt); width: var(--bs); height: var(--bs); box-sizing: border-box;
+  border-radius: calc(var(--bs) * .22); border: max(1px, calc(var(--bs) * .09)) solid var(--flow-mute); cursor: pointer;
+}
+.flow-editor > div[data-list="todo"][data-checked]::before {
+  border: 0; background: #3E6E9F url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2.5 5.2l1.8 1.8 3.3-3.8' fill='none' stroke='%23fff' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
+.flow-editor > div[data-list="todo"][data-checked] { color: var(--flow-mute); text-decoration: line-through; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {

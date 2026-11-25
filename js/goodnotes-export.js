@@ -10,6 +10,7 @@ import { PAGE_W } from './store.js';
 import { pageH, renderPage, toRadius, textHeight } from './render.js';
 import { toast, sheet } from './ui.js';
 import { h } from './util.js';
+import { flowAsTextBox } from './flow.js';
 
 const PT = 1091.237 / PAGE_W; // Goodnotes' A4 page is 1091.237 × 1543.667 points
 const SCHEMA = 24;
@@ -305,7 +306,8 @@ export async function notebookToGoodnotes(doc, { quiet = false } = {}) {
     // 106) repeats both, as in Goodnotes' own files. Strokes have neither.
     const recs = [], members = [];
     let seq = 1;
-    for (const e of page.elements) {
+    for (const el of page.elements) {
+      const e = el.type === 'flow' ? flowAsTextBox(el, page) : el; // typed text: as a plain text box
       const id = uuid(), key = uuid(), hc = clock(seq);
       if (e.type === 'stroke') {
         recs.push(pb().s(1, id).m(2, hc).u(8, device).u(9, elementSeq++).u(14, 5381).u(16, SCHEMA));

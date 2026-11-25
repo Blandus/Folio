@@ -11,6 +11,7 @@ import { toast, popover, closePopover, menu } from './ui.js';
 import { samplePiece, addSamplesToPath, strokeSamples, tipRadius } from './ink.js';
 import { PenInput, penPredictions } from './handwriting.js';
 import { recording, recBegin, recMove, recUp, recEnd } from './pencilrec.js';
+import { typeAt } from './typing.js';
 import { readRunsDom, renderRunsDom, selectionOffsets, setSelectionOffsets, styleAtPos, applyRange, normalize, runsOf } from './richtext.js';
 
 let overlay, octx;
@@ -243,6 +244,9 @@ function onDown(e) {
     return;
   }
   if (e.target.closest('.sel-menu, .text-editor, .lasso-hint')) return;
+  // typed text being edited (typing.js): pencil and mouse set the caret and select natively;
+  // a finger still scrolls and zooms (a tap places the caret, see detectDoubleTap)
+  if (e.target.closest('.flow-editor') && e.pointerType !== 'touch') return;
   removeLassoHint();
   // Shape corner handles can be dragged with pen, finger or mouse.
   const handle = e.target.closest('.shape-handle');
@@ -270,7 +274,7 @@ function start(e) {
   const el = e.target.closest('.page');
   if (!el) {
     if (ed.tool === 'lasso') clearSelection();
-    if (ed.tool === 'text') finishText();
+    if (ed.tool === 'text' || ed.tool === 'type') finishText();
     return;
   }
   e.preventDefault();
@@ -289,6 +293,7 @@ function start(e) {
     case 'eraser': return startErase(base, pt, e);
     case 'lasso': return startLasso(base, pt, e);
     case 'text': drawing = { ...base, kind: 'text', pt }; return; // acts on pointerup (keyboard focus needs a tap)
+    case 'type': drawing = { ...base, kind: 'type', pt, cx: e.clientX, cy: e.clientY }; return; // likewise
     case 'laser': drawing = { ...base, kind: 'laser', stroke: uid() }; return addLaser(e);
     case 'screenshot': drawing = { ...base, kind: 'shot', from: [e.clientX, e.clientY], to: [e.clientX, e.clientY] }; return;
   }
@@ -399,6 +404,13 @@ function detectDoubleTap(e) {
   if (!t || t.id !== e.pointerId || settings.fingerDraw || touches.size) return;
   const now = performance.now();
   if (now - t.t > 250 || Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12) { lastTap = null; return; }
+  if (ed.tool === 'type') { // Tipp-Modus: a finger tap sets the caret (pencil and mouse via start())
+    lastTap = null;
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('.page');
+    if (!el) return finishText();
+    if (ed.editing && !ed.editing.flow) finishText();
+    return typeAt(el, toPage(e, el), e.clientX, e.clientY);
+  }
   showShapeHandlesAt(e.clientX, e.clientY);
   if (lastTap && now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 60) {
     lastTap = null;
@@ -632,6 +644,9 @@ function finish(ok) {
     finishLasso(d);
   } else if (d.kind === 'text') {
     textAt(d.el, d.pt);
+  } else if (d.kind === 'type') {
+    if (ed.editing && !ed.editing.flow) finishText();
+    typeAt(d.el, d.pt, d.cx, d.cy);
   } else if (d.kind === 'shot') {
     screenshot(d);
   } else if (d.kind === 'vertex') {
@@ -1274,7 +1289,7 @@ let press = null;
 function cancelPress() { if (press) { clearTimeout(press.t); press = null; } }
 function watchPress(e) {
   cancelPress();
-  if (settings.fingerDraw || touches.size !== 1 || palmLikely() || !e.target.closest('.page') || e.target.closest('.selbox, .text-editor')) return;
+  if (settings.fingerDraw || touches.size !== 1 || palmLikely() || !e.target.closest('.page') || e.target.closest('.selbox, .text-editor, .flow-editor')) return;
   const p = press = { id: e.pointerId, x: e.clientX, y: e.clientY };
   p.t = setTimeout(() => {
     if (press !== p || touches.size !== 1) return;
@@ -1407,7 +1422,7 @@ function editText(pageEl, t, isNew) {
 // Remember the selection inside the box (toolbar taps must not lose it) and refresh the bar.
 document.addEventListener('selectionchange', () => {
   const st = ed.editing;
-  if (!st) return;
+  if (!st || st.flow) return; // typed text keeps its own bar up to date (typing.js)
   const o = selectionOffsets(st.box);
   if (!o) return;
   const changed = !st.sel || st.sel[0] !== o[0] || st.sel[1] !== o[1];
@@ -1418,6 +1433,7 @@ document.addEventListener('selectionchange', () => {
 export async function finishText() {
   const st = ed.editing;
   if (!st) return;
+  if (st.flow) return st.finish(); // typed text (typing.js)
   st.sync();
   ed.editing = null;
   st.box.remove(); st.frame?.remove(); st.unobserve?.();

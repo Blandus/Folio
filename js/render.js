@@ -3,6 +3,7 @@ import { r2 } from './util.js';
 import { fillStroke } from './ink.js';
 import { layout, drawRich, LINE_H } from './richtext.js';
 import { drawPdfPage } from './pdfdoc.js';
+import { drawFlow, pagePt } from './flow.js';
 
 export const pageH = p => p.h || 1414;
 // Infinite pages (page.inf) have their own width and an origin: their area is x0..x0+w × y0..y0+h
@@ -113,12 +114,6 @@ function goodnotesGrid(ctx, x0, y0, x1, y1, u, dark) {
   for (let y = from(y0); y + lw <= y1; y += gap) ctx.fillRect(x0, y, x1 - x0, lw);
   ctx.restore();
 }
-// Paper width in points for a page of PAGE_W × h units: A4 or Letter, portrait or landscape.
-function pagePt(h) {
-  const r = h / PAGE_W, near = (a, b, c) => Math.abs(a - b) < Math.abs(a - c);
-  return r >= 1 ? (near(r, 11 / 8.5, 841.89 / 595.28) ? 612 : 595.28) : (near(1 / r, 11 / 8.5, 841.89 / 595.28) ? 792 : 841.89);
-}
-
 // Infinite pages: lines, grid or dots continue across the whole area (no margins or headers).
 export function drawInfiniteTemplate(ctx, page) {
   const t = page.template, dark = page.paper === 'dark';
@@ -208,6 +203,10 @@ export async function renderPage(ctx, page, scale, hide, ox = 0, oy = 0, clip = 
   ctx.setTransform(scale, 0, 0, scale, ox, oy);
   if (page.inf) drawInfiniteTemplate(ctx, page);
   else drawTemplate(ctx, page.template, h, page.paper === 'dark');
+  // typed text (Tipp-Modus, flow.js) lies on the paper, under handwriting and pictures
+  // (two after a sync conflict: drawn one after the other, as typing.js joins them)
+  const flows = els.filter(e => e.type === 'flow');
+  if (flows.length) drawFlow(ctx, flows.length === 1 ? flows[0] : { blocks: flows.flatMap(e => e.blocks || []) }, page);
   drawElements(ctx, els, imgs);
   if (clip) ctx.restore();
 }
@@ -270,6 +269,7 @@ export function bbox(e) {
     const l = layout(e, measure);
     return { x: e.x, y: e.y, w: Math.max(e.size, l.w), h: Math.max(e.size * LINE_H, l.h) };
   }
+  if (e.type === 'flow') return { x: 0, y: 0, w: PAGE_W, h: 1e5 }; // typed text spans the page (partial redraws include it)
   return { x: e.x, y: e.y, w: e.w, h: e.h };
 }
 

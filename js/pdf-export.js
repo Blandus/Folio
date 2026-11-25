@@ -5,6 +5,7 @@ import { pageH, pageX0, pageY0, unionBox, paperColor, drawTemplate, drawInfinite
 import { layout } from './richtext.js';
 import { strokeSamples, strokeRadiusFn, addSamplesToPath } from './ink.js';
 import { pdfExportSource } from './pdfdoc.js';
+import { lineGrid, layoutFlow, rowLine, flowColors } from './flow.js';
 
 export const MAX_EXPORT_PAGES = 500;
 export function exportArea(page) {
@@ -129,6 +130,70 @@ async function drawText(pdf, writer, text, fonts, measure) {
   }
 }
 
+// Typed text (Tipp-Modus, flow.js): same layout as on screen, as real PDF text. List bullets and
+// checkboxes are drawn as shapes (the PDF fonts lack some of the bullet characters).
+async function drawFlowPdf(pdf, writer, el, model, fonts) {
+  if (!el.blocks?.length) return;
+  const g = lineGrid(model), L = layoutFlow(el, g), C = flowColors(model.paper === 'dark'), pt = writer.pt;
+  const { pushGraphicsState, popGraphicsState, concatTransformationMatrix } = writer.lib;
+  const fontOf = async (st, str) => {
+    const font = await fontFor(pdf, fonts, st);
+    const supported = new Set(font.getCharacterSet());
+    const missing = [...str].find(c => !supported.has(c.codePointAt(0)));
+    if (missing) throw new Error(`Das Zeichen „${missing}“ wird von der PDF-Schrift noch nicht unterstützt.`);
+    return font;
+  };
+  const text = async (str, st, x, base, w, color) => {
+    const font = await fontOf(st, str), size = st.size * pt, width = font.widthOfTextAtSize(str, size);
+    const stretch = w && width > 0 ? w * pt / width : 1;
+    writer.page.pushOperators(pushGraphicsState(), concatTransformationMatrix(stretch, 0, 0, 1, writer.x(x), writer.y(base)));
+    writer.page.drawText(str, { x: 0, y: 0, size, font, ...writer.color(color) });
+    writer.page.pushOperators(popGraphicsState());
+  };
+  for (const bl of L.blocks) {
+    const b = bl.b, done = b.listStyleType === 'todo' && !!b.checked, quote = b.type === 'blockquote';
+    const x0 = g.left + bl.x0, base0 = rowLine(g, bl.row0, bl.f) - g.off, mx = x0 - g.istep, size = bl.f.size;
+    if (quote) {
+      const top = g.first + (bl.row0 - 1) * g.pitch + g.pitch * 0.22, bottom = g.first + (bl.row0 + bl.rows - 1) * g.pitch - g.pitch * 0.04;
+      writer.fillStyle = C.bar; writer.fillRect(g.left + 2, top, 3, bottom - top);
+    }
+    if (b.listStyleType === 'todo') {
+      const s = Math.round(size * 0.82 * 10) / 10, bx = mx + (g.istep - s) / 2, by = base0 - s * 0.86;
+      if (done) {
+        writer.page.drawRectangle({ x: writer.x(bx), y: writer.y(by + s), width: s * pt, height: s * pt, ...writer.color(C.check) });
+        writer.page.drawSvgPath(`M${bx + s * 0.25} ${by + s * 0.52} L${bx + s * 0.43} ${by + s * 0.7} L${bx + s * 0.76} ${by + s * 0.32}`,
+          { x: writer.x(0), y: writer.y(0), scale: pt, borderColor: writer.lib.rgb(1, 1, 1), borderWidth: s * 0.12 * pt });
+      } else {
+        const { color } = writer.color(C.mute);
+        writer.page.drawRectangle({ x: writer.x(bx), y: writer.y(by + s), width: s * pt, height: s * pt, borderColor: color, borderWidth: Math.max(1, s * 0.09) * pt });
+      }
+    } else if (b.listStyleType === 'disc') {
+      const lv = ((b.indent || 1) - 1) % 3, r = size * 0.16, cx = mx + g.istep / 2, cy = base0 - size * 0.33;
+      if (lv === 2) { writer.fillStyle = C.text; writer.fillRect(cx - r, cy - r, 2 * r, 2 * r); }
+      else {
+        const { color } = writer.color(C.text);
+        writer.page.drawCircle({ x: writer.x(cx), y: writer.y(cy), size: r * pt, ...(lv ? { borderColor: color, borderWidth: r * 0.4 * pt } : { color }) });
+      }
+    } else if (b.listStyleType === 'decimal') {
+      const st = { size, bold: false }, font = await fontOf(st, bl.mark);
+      await text(bl.mark, st, x0 - g.istep * 0.2 - font.widthOfTextAtSize(bl.mark, size * pt) / pt, base0, 0, C.text);
+    }
+    for (const line of bl.lines) {
+      const base = rowLine(g, line.row, bl.f) - g.off;
+      for (const seg of line.segs) {
+        const st = seg.st, x = x0 + seg.x, word = seg.text.trimEnd();
+        if (st.backgroundColor && st.backgroundColor !== 'transparent') { writer.fillStyle = st.backgroundColor; writer.fillRect(x, base - st.size * 0.95, seg.w, st.size * 1.19); }
+        if (!seg.text.trim()) continue;
+        await text(seg.text, st, x, base, seg.w, done ? C.mute : st.color || (quote ? C.quote : C.text));
+        const lw = Math.max(0.8, st.size * 0.06), font = await fontOf(st, word), w = font.widthOfTextAtSize(word, st.size * pt) / pt * (seg.w / (font.widthOfTextAtSize(seg.text, st.size * pt) / pt || 1));
+        writer.fillStyle = done ? C.mute : st.color || (quote ? C.quote : C.text);
+        if (st.underline) writer.fillRect(x, base + st.size * 0.1, w, lw);
+        if (st.strikethrough || done) writer.fillRect(x, base - st.size * 0.3, w, lw);
+      }
+    }
+  }
+}
+
 function drawInk(writer, stroke) {
   if (!stroke.points.length) return;
   const path = new VectorPath(), color = writer.color(stroke.color);
@@ -234,6 +299,8 @@ export async function createPdf(doc, pages = doc.pages, progress = () => {}) {
     }
     if (model.inf) drawInfiniteTemplate(writer, { ...model, x0: area.x, y0: area.y, w: area.w, h: area.h });
     else drawTemplate(writer, model.template, pageH(model), model.paper === 'dark');
+    const flows = model.elements.filter(e => e.type === 'flow'); // typed text, joined like on screen
+    if (flows.length) await drawFlowPdf(pdf, writer, { blocks: flows.flatMap(e => e.blocks || []) }, model, fonts);
     for (const element of model.elements) {
       if (element.type === 'text') await drawText(pdf, writer, element, fonts, measure);
       else if (element.type === 'stroke') drawInk(writer, element);

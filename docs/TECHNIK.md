@@ -52,7 +52,8 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   Google springt; nach einem 401 pausieren sie (`drive.needsLogin`). `sw.js` lässt `/api/` nie in den Cache.
 - **Kalender-Feeds sind Nutzereingaben:** private ICS-Adressen nie in Code, Beispieldaten oder Logs.
 - **Import-Zyklen – nichts aus Partnermodulen auf oberster Ebene benutzen:** `editor.js`, `library.js`, `textdoc.js`,
-  `tools.js`, `deck.js`, `inkpad.js` und `learnplan.js` importieren sich gegenseitig (13 Zyklen). Ursachen:
+  `tools.js`, `deck.js`, `inkpad.js`, `learnplan.js` und (ab v87) `typing.js` importieren sich gegenseitig (13 Zyklen,
+  dazu tools.js → typing.js → editor.js). Ursachen:
   `openDoc()` (editor.js) und `renderLibrary()` (library.js) sind die Navigation aller Bildschirme; `editor.js` hält
   den gemeinsamen Zustand (`ed`, `sc`, `T`, `PALETTE`, `PALETTES`, `saveTools`), den `tools.js`, `inkpad.js` und
   `library.js` nutzen; Bibliothek, Karteikarten und Lernübersicht öffnen sich gegenseitig. Das funktioniert nur, weil
@@ -66,6 +67,11 @@ Details stehen jeweils im genannten Abschnitt bzw. Code-Kommentar.
   `renderLibrary()` wie feste Schnittstellen behandeln. Die Zyklen bewusst nicht aufgelöst (wäre ein großer Umbau ohne
   Nutzen für den Anwender); Übersicht im Wissensgraphen des Betreibers (`Folio/graphify-out/GRAPH_REPORT.md`,
   Abschnitt Import Cycles; nicht im Repository).
+- **Tipp-Modus: eine Rechnung für Bildschirm, Bearbeiten und PDF** (`js/flow.js`, ab v87): Lage jeder Zeile
+  (Linienabstand, Grundlinie `g.off` über der Linie, Einzug, Umbruch) wird nur in `flow.js` berechnet; die
+  Bearbeitungsansicht (`js/typing.js`) verschiebt jede Zeile per `top` so, dass ihre CSS-Grundlinie genau dort liegt
+  (`styleBlock`, Schriftmaße aus `fontMetrics`). Wer Schriftgrößen, Abstände oder den Umbruch nur an einer Stelle
+  ändert, lässt den Text beim Antippen springen. Neue Papiervorlagen brauchen einen Eintrag in `lineGrid()`.
 - **Design-Regeln (ab v72):** Systemschrift; nur die Schriftgrößen 11 · 12 · 13 · 14 · 15 · 16 · 17 · 20 · 22 · 28 · 34 px
   (Kommentar bei `--font` in `style.css`); Dialoge per Wischen schließbar (`swipeToDismiss` in `js/ui.js`), Schließen
   spiegelt das Öffnen; „Bewegung reduzieren“ ersetzt Bewegung durch Überblendungen statt sie abzuschalten.
@@ -211,6 +217,50 @@ Der Modus bleibt beim Wechsel zwischen Dokumenten an, bis „Bearbeiten“; nach
 Ausschalten bleibt die Stelle im Dokument (Anteil der Scrollhöhe). Ohne Kopfzeile beginnt die Seite unter der
 Statusleiste (`env(safe-area-inset-top)`). Getestet im Browser (1180×820): Ziehen zeichnet nicht, Tastenkürzel
 gesperrt, Esc beendet. Nicht auf dem echten iPad mit Pencil getestet.
+
+## Tipp-Modus im Notizbuch (ab v87)
+Werkzeug **Tippen** (Tastatur-Symbol neben „Text“). Antippen einer Linie setzt dort den Cursor; jede Zeile sitzt
+genau auf einer Linie des Papiers. Pro Seite gibt es **einen durchgehenden Text** von oben nach unten: Tippt man
+unterhalb des Textes, füllt Folio bis dorthin mit Leerzeilen auf; tippt man hinein, landet der Cursor an der Stelle.
+Ein Finger scrollt weiter, ein Tipp mit dem Finger setzt den Cursor (auch bei „Nur mit Stift zeichnen“); Pencil und
+Maus setzen ihn direkt, Maus/Tastatur markieren wie gewohnt.
+- **Formate wie in Textdokumenten** (Leiste oben): Text, Überschrift 1–3, Zitat; fett, kursiv, unterstrichen,
+  durchgestrichen (Strg+B/I/U), Textfarbe, Markierung; Aufzählung, Nummerierung, Checkliste (Kästchen antippen),
+  Ein-/Ausrücken (Tab/Umschalt+Tab oder die Pfeile in der Leiste, fürs iPad ohne Tastatur). Enter in leerem
+  Listenpunkt beendet die Liste, Rücktaste am Zeilenanfang macht Liste/Überschrift wieder zu Text. Tabellen, Bilder
+  und Trennlinien gibt es hier bewusst nicht (passen nicht ins Linienraster; Bilder hat das Bild-Werkzeug).
+- **Raster** (`lineGrid()` in `js/flow.js`, passend zu `drawTemplate` in `render.js`): Liniert 40 Einheiten ab
+  y 120, Text hinter dem roten Rand; Liniert schmal 30; Notizblock ab 190; Cornell im rechten Feld; Kariert wie
+  Goodnotes (16 pt), Text ab der dritten Kästchenreihe/-spalte, eine Zeile pro Kästchen; Gepunktet 25; Leer, PDF- und
+  Bildseiten bekommen unsichtbare Linien wie „Liniert“. Textgröße folgt dem Linienabstand (Fließtext 50–62 % davon,
+  höchstens 17 Einheiten), Überschrift 1 belegt zwei Linien, 2 und 3 eine.
+- **Speicherformat:** ein Element `{ type: 'flow', id, blocks }` je Seite, Absätze im Knotenmodell der
+  Textdokumente (`listStyleType`, `indent`, `checked`, Zeichenformate als Felder der Textstücke). Es liegt vorn in
+  `page.elements` und wird vor allem anderen gezeichnet: Handschrift liegt immer darüber. Lasso und Radierer fassen
+  es nicht an; „Seite leeren“ löscht es mit. Eine Bearbeitung = ein Rückgängig-Schritt. Leerzeilen am Ende werden
+  nicht gespeichert. Sync: das ganze Element wird verglichen; bei Änderung auf zwei Geräten bleiben zwei Elemente
+  (Konflikt-Hinweis), die Folio beim nächsten Bearbeiten zu einem Text verbindet.
+- **Export:** PDF mit echtem Text an denselben Stellen (Aufzählungspunkte und Kästchen als Formen). `.goodnotes`:
+  als einfaches Textfeld an derselben Stelle („• “, „1. “, „☑ “ vor den Zeilen), ohne Formate und Linienabstand.
+  Suche im Dokument und in der Bibliothek findet getippten Text.
+- **Grenzen:** nicht auf unendlichen Seiten (Hinweis). Reicht der Text über die letzte Linie, kommt ein Hinweis; er
+  läuft dann über den unteren Rand hinaus statt auf die nächste Seite. Unterstreichen sitzt beim Bearbeiten an der
+  Stelle der Schrift, danach etwas fester; sonst sind Bearbeiten und fertige Seite pixelgleich (getestet bei 100 %
+  und 250 %).
+- **Getestet** im Browser (Maus und simulierte Fingertipps; 1180×820 dunkel, 820×1180 hell): Liniert, Kariert,
+  Gepunktet auf dunklem Papier, alle Formate, Checkliste antippen, Cursor per Tipp in den Text, Leerzeilen-Auffüllen,
+  Rückgängig/Wiederholen, Seite-voll-Hinweis, Suche, PDF-Export (gerendert und angesehen), Goodnotes-Export läuft
+  durch. **Nicht getestet:** echtes iPad (Bildschirmtastatur, Fokus per Fingertipp, Pencil, Scribble), Goodnotes-
+  Import der exportierten Datei, Sync-Konflikt mit zwei Geräten.
+
+## Seiten umsortieren (ab v87)
+Seitenübersicht: **lange drücken** (Finger, Pencil oder Maus, 0,45 s) hebt die Miniatur an, sie folgt dem Finger,
+die anderen rücken auf; am oberen/unteren Rand scrollt die Liste mit; loslassen legt die Seite dort ab (ein
+Rückgängig-Schritt, `thumbPress` in `js/editor.js`). Langes Drücken **ohne Bewegung** öffnet wie bisher das
+Seitenmenü; Rechtsklick ebenso; mit der Maus genügt auch einfaches Ziehen. Die gerade angesehene Seite bleibt an
+ihrer Stelle im Bild. Mit dem Filter „Lesezeichen“ landet die Seite vor der Lesezeichen-Seite, vor der sie abgelegt
+wurde. Solange eine Seite angehoben ist, scrollt die Liste nicht von selbst (`touchmove` wird abgefangen).
+Getestet im Browser mit Maus und simulierten Fingerereignissen; **nicht** auf dem echten iPad.
 
 ## Unendliche Notizbücher (ab v52)
 Im Dialog „Neues Notizbuch“ gibt es neben A4 und Letter das Format **„Unendlich“** (wie das Whiteboard in Goodnotes):
@@ -788,6 +838,8 @@ notizen/
   js/ink.js       Strich-Modell (Radius pro Punkt, wie im .goodnotes-Format)
   js/goodnotes.js / goodnotes-export.js   .goodnotes-Import und -Export
   js/textdoc.js   Textdokumente: Editor, Speicherformat, Vorschau
+  js/flow.js      Tipp-Modus: Linienraster, Layout und Zeichnen des getippten Texts einer Seite (rein)
+  js/typing.js    Tipp-Modus: Bearbeiten auf der Seite, Formatleiste
   js/deck.js      Karteikarten: Stapel-Übersicht, Karten bearbeiten, Import, Lernmodus
   js/srs.js       Wiederholungsplanung FSRS-6, Lernsitzung, Statistik (rein, ohne I/O)
   js/cardformat.js  Textformat der Karteikarten: Einlesen, Export, KI-Prompt, Darstellung (Formeln)
@@ -869,7 +921,7 @@ design/folio-reference.png   Design-Referenz
 
 ### Nicht umgesetzt
 - Handschrifterkennung / Umwandlung in Text, Suche in Handschrift
-- Seiten per Drag & Drop umsortieren, Elemente zwischen Seiten verschieben
+- Elemente zwischen Seiten verschieben (Seiten umsortieren gibt es ab v87)
 - Horizontales Blättern, Präsentationsmodus, Audioaufnahme, Teilen/Zusammenarbeit, Marketplace, KI-Funktionen
 
 ## Design (Folio)

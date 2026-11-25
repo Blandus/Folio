@@ -16,6 +16,7 @@ import { ensureLocal, offload, runOffload, recordSize, offloadOn, offloadMin, OF
 import { recording, setRecording } from './pencilrec.js';
 import { htrOn, setHtr, htrDocIds } from './htr.js'; // HTR-Beta
 import { parentTile, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickScript, pickFrom, attachAsVersion } from './versions.js';
+import { flowText } from './flow.js';
 
 const SECTIONS = {
   docs: { label: 'Alle Notizen', icon: 'notes' },
@@ -95,7 +96,7 @@ function folderPath(id) {
   return out;
 }
 const descendants = id => live().filter(r => r.parent === id).flatMap(r => [r, ...(r.kind === 'folder' ? descendants(r.id) : [])]);
-const containsText = (r, q) => r.kind === 'textdoc' ? plainText(r).toLowerCase().includes(q) : r.kind === 'deck' ? deckText(r).toLowerCase().includes(q) : r.kind === 'notebook' && r.pages.some(p => (p.pdfText || '').toLowerCase().includes(q) || p.elements.some(e => e.type === 'text' && e.text.toLowerCase().includes(q)));
+const containsText = (r, q) => r.kind === 'textdoc' ? plainText(r).toLowerCase().includes(q) : r.kind === 'deck' ? deckText(r).toLowerCase().includes(q) : r.kind === 'notebook' && r.pages.some(p => (p.pdfText || '').toLowerCase().includes(q) || p.elements.some(e => (e.type === 'text' && e.text.toLowerCase().includes(q)) || (e.type === 'flow' && flowText(e).toLowerCase().includes(q))));
 
 const kindOk = r => lib.filter === 'all' || r.kind === lib.filter; // filter tabs
 // Versions and a script's decks are listed under the original's tile (versions.js); with the

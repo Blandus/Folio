@@ -14,6 +14,8 @@ import { showTextDoc, leaveTextDoc } from './textdoc.js';
 import { htrOn, htrQueue, htrSearchDoc } from './htr.js'; // HTR-Beta
 import { rootId, versionsIn, decksIn, versionLabel, askNewVersion, renameGroup, exportVersions, pickFrom } from './versions.js';
 import { configurePrefs } from './prefs.js';
+import { flowBar } from './typing.js';
+import { flowText } from './flow.js';
 
 // Page canvases only need to look fine while scrolling; the detail layer provides sharpness.
 // Keeping them smaller saves iPad memory and makes each re-render faster.
@@ -41,10 +43,10 @@ settings.tools = T;
 export const saveTools = debounce(saveSettings, 300);
 
 // Tools, shown in the tool row in these groups (drawing · content · presentation)
-const TOOL_GROUPS = [['pen', 'highlighter', 'eraser', 'lasso', 'shapes'], ['text', 'image'], ['laser', 'screenshot']];
+const TOOL_GROUPS = [['pen', 'highlighter', 'eraser', 'lasso', 'shapes'], ['text', 'type', 'image'], ['laser', 'screenshot']];
 const TOOLS = [
   ['pen', 'Stift', 'pen'], ['eraser', 'Radierer', 'eraser'], ['highlighter', 'Textmarker', 'highlighter'],
-  ['text', 'Text', 'text'], ['shapes', 'Formen', 'shapes'], ['image', 'Bild', 'image'],
+  ['text', 'Text', 'text'], ['type', 'Tippen (auf den Linien)', 'keyboard'], ['shapes', 'Formen', 'shapes'], ['image', 'Bild', 'image'],
   ['laser', 'Laserpointer', 'laser'], ['screenshot', 'Screenshot', 'screenshot'],
 ];
 // Colour palettes for the colour picker (switchable; the choice is saved per device).
@@ -626,12 +628,109 @@ export function renderThumbs() {
     const item = h('button', { class: 'thumb-item' + (i === ed.cur ? ' active' : ''), 'data-i': i, onclick: () => scrollToPage(i) },
       h('div', { class: 'thumb-frame' }, c, p.bookmark ? h('span', { class: 'thumb-bm' }, icon('bookmarkFill', 14)) : null),
       h('span', { class: 'thumb-num' }, i + 1));
-    onContext(item, (x, y) => pageMenu(i, { x, y }));
+    item.addEventListener('contextmenu', e => { e.preventDefault(); pageMenu(i, { x: e.clientX, y: e.clientY }); });
+    item.addEventListener('pointerdown', e => thumbPress(e, item, i));
     return item;
   });
   thumbsEl.replaceChildren(
     h('div', { class: 'thumbs-head' }, segmented([['all', 'Alle Seiten'], ['bm', 'Lesezeichen']], thumbFilter, v => { thumbFilter = v; renderThumbs(); })),
     h('div', { class: 'thumbs-list' }, items.length ? items : h('div', { class: 'empty small' }, 'Keine Lesezeichen')));
+}
+
+// Reordering pages in the overview: a long press (finger, pencil or mouse, 0.45 s) lifts the
+// page, it follows the pointer and the others make room; letting go drops it there. A long
+// press released without moving opens the page menu (as before). A mouse may also just drag.
+// While a page is lifted, the list must not scroll by itself (touchmove is cancelled) but
+// scrolls when the page is held near its top or bottom edge.
+let thumbDrag = null;
+thumbsEl.addEventListener('touchmove', e => { if (thumbDrag?.lifted) e.preventDefault(); }, { passive: false });
+thumbsEl.addEventListener('click', e => { if (thumbDrag?.swallow) { e.stopPropagation(); e.preventDefault(); thumbDrag = null; } }, true);
+function thumbPress(e, item, i) {
+  if (e.button !== 0 || thumbDrag?.lifted) return;
+  const d = thumbDrag = { item, i, id: e.pointerId, x: e.clientX, y: e.clientY, mouse: e.pointerType === 'mouse' };
+  d.timer = setTimeout(() => { if (thumbDrag === d && !d.lifted) liftThumb(d); }, 450);
+  const move = ev => {
+    if (ev.pointerId !== d.id) return;
+    d.cx = ev.clientX; d.cy = ev.clientY;
+    if (!d.lifted) {
+      if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) < 8) return;
+      if (!d.mouse) return end(); // the finger scrolls the list
+      liftThumb(d); // a mouse drag lifts right away
+    }
+    d.moved = true;
+    dragThumbTo(d);
+  };
+  const end = ev => {
+    clearTimeout(d.timer);
+    removeEventListener('pointermove', move); removeEventListener('pointerup', end); removeEventListener('pointercancel', end);
+    if (thumbDrag !== d) return;
+    if (!d.lifted) { thumbDrag = null; return; }
+    dropThumb(d, ev?.type === 'pointerup');
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', end); addEventListener('pointercancel', end);
+}
+function liftThumb(d) {
+  clearTimeout(d.timer);
+  d.lifted = true; d.swallow = true;
+  const list = thumbsEl.querySelector('.thumbs-list'), r = d.item.getBoundingClientRect();
+  d.list = list; d.dx = d.x - r.left; d.dy = d.y - r.top; d.cx ??= d.x; d.cy ??= d.y;
+  d.ghost = d.item.cloneNode(true);
+  // the clone's canvas is blank: show the rendered thumbnail as an image
+  const src = d.item.querySelector('canvas'), dst = d.ghost.querySelector('canvas');
+  if (src && dst && src.width) dst.replaceWith(Object.assign(new Image(), { src: src.toDataURL(), className: 'thumb-ghost-img' }));
+  d.ghost.classList.add('thumb-ghost'); d.ghost.classList.remove('active');
+  Object.assign(d.ghost.style, { width: r.width + 'px', left: r.left + 'px', top: r.top + 'px' });
+  document.body.append(d.ghost);
+  d.item.classList.add('thumb-placeholder');
+  navigator.vibrate?.(10);
+  const scroll = () => {
+    if (thumbDrag !== d || !d.lifted) return;
+    const lr = list.getBoundingClientRect(), edge = 48;
+    const v = d.cy < lr.top + edge ? -(lr.top + edge - d.cy) : d.cy > lr.bottom - edge ? d.cy - (lr.bottom - edge) : 0;
+    if (v) { list.scrollTop += Math.max(-14, Math.min(14, v / 3)); dragThumbTo(d); }
+    requestAnimationFrame(scroll);
+  };
+  requestAnimationFrame(scroll);
+}
+function dragThumbTo(d) {
+  d.ghost.style.transform = `translate(${d.cx - d.x}px, ${d.cy - d.y}px) scale(1.04)`;
+  // the placeholder goes before the first other item whose middle lies below the pointer
+  const others = [...d.list.querySelectorAll('.thumb-item')].filter(el => el !== d.item);
+  const before = others.find(el => { const r = el.getBoundingClientRect(); return d.cy < r.top + r.height / 2; }) || null;
+  if (before === d.item.nextElementSibling || (!before && d.item === d.list.lastElementChild)) return;
+  // the others glide to their new place (FLIP)
+  const old = new Map(others.map(el => [el, el.getBoundingClientRect().top]));
+  d.list.insertBefore(d.item, before);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (const [el, top] of old) {
+    const dy = top - el.getBoundingClientRect().top;
+    if (!dy) continue;
+    el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  }
+}
+function dropThumb(d, released) {
+  d.lifted = false;
+  d.ghost.remove();
+  d.item.classList.remove('thumb-placeholder');
+  // where it landed: before the page that now follows it in the list (or after the one before it)
+  const next = d.item.nextElementSibling, prev = d.item.previousElementSibling;
+  const pages = ed.doc.pages.slice(), [page] = pages.splice(d.i, 1);
+  let at = next ? pages.indexOf(ed.doc.pages[+next.dataset.i]) : prev ? pages.indexOf(ed.doc.pages[+prev.dataset.i]) + 1 : d.i;
+  if (at < 0) at = d.i;
+  if (d.moved && at !== d.i) {
+    // the page being looked at stays in view, at the same place
+    const curId = currentPage()?.id, top = el => el.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+    const off = ed.pageEls[ed.cur] ? top(ed.pageEls[ed.cur]) : 0;
+    pages.splice(at, 0, page);
+    commitPages(pages); // one undo step
+    const cur = ed.pageEls[pages.findIndex(p => p.id === curId)];
+    if (cur) sc.scrollTop += top(cur) - off;
+  } else {
+    renderThumbs();
+    if (released && !d.moved) pageMenu(d.i, { x: d.cx, y: d.cy });
+  }
+  // the click that follows pointerup must not jump to the page; cleared by that click or shortly after
+  setTimeout(() => { if (thumbDrag === d) thumbDrag = null; }, 400);
 }
 function highlightThumb() {
   thumbsEl.querySelectorAll('.thumb-item').forEach(b => {
@@ -677,12 +776,13 @@ export function toggleSearch(open = searchEl.hidden) {
       if (!q) return results.replaceChildren();
       const hits = [];
       ed.doc.pages.forEach((p, i) => p.elements.forEach(e => {
-        if (e.type !== 'text') return;
-        const idx = e.text.toLowerCase().indexOf(q);
-        if (idx >= 0) hits.push({ i, e, snippet: e.text.slice(Math.max(0, idx - 30), idx + q.length + 40) });
+        if (e.type !== 'text' && e.type !== 'flow') return;
+        const text = e.type === 'flow' ? flowText(e) : e.text;
+        const idx = text.toLowerCase().indexOf(q);
+        if (idx >= 0) hits.push({ i, e, flow: e.type === 'flow', snippet: text.slice(Math.max(0, idx - 30), idx + q.length + 40) });
       }));
       const show = all => results.replaceChildren(...(all.length ? all.map(r => h('button', {
-        class: 'search-hit', onclick: () => { scrollToPage(r.i); selectTool('lasso'); selectIds(ed.doc.pages[r.i], r.ids || [r.e.id]); },
+        class: 'search-hit', onclick: () => { scrollToPage(r.i); if (r.flow) return; selectTool('lasso'); selectIds(ed.doc.pages[r.i], r.ids || [r.e.id]); },
       }, h('div', { class: 'hit-page' }, `Seite ${r.i + 1}${r.ids ? ' · Handschrift' : ''}`), h('div', { class: 'hit-text' }, r.snippet))) : [h('div', { class: 'empty small' }, 'Keine Treffer')]));
       show(hits);
       // HTR-Beta: handwritten matches (recognised text, see htr.js)
@@ -692,7 +792,7 @@ export function toggleSearch(open = searchEl.hidden) {
   if (htrOn()) htrQueue(ed.doc.id, true); // HTR-Beta: this document first
   searchEl.replaceChildren(
     h('div', { class: 'panel-head' }, input, h('button', { class: 'iconbtn', title: 'Schließen', onclick: () => toggleSearch(false) }, icon('close', 18))),
-    h('div', { class: 'hint pad' }, htrOn() ? 'Durchsucht Textfelder und Handschrift (Beta: erkannter Text, kleine Lesefehler werden toleriert).' : 'Durchsucht Textfelder. Handschrift: Einstellungen → Stift → Handschrift erkennen (Beta).'),
+    h('div', { class: 'hint pad' }, htrOn() ? 'Durchsucht Textfelder, getippten Text und Handschrift (Beta: erkannter Text, kleine Lesefehler werden toleriert).' : 'Durchsucht Textfelder und getippten Text. Handschrift: Einstellungen → Stift → Handschrift erkennen (Beta).'),
     results);
   input.focus();
 }
@@ -1239,6 +1339,8 @@ export function renderOptions() {
         class: 'opt-drop', title: 'Schriftart', style: { fontFamily: fontFamily(cur) },
         onclick: e => { const p = menu(e.currentTarget, Object.entries(FONTS).map(([k, [label]]) => ({ label, checked: (cur.font || 'sans') === k, action: () => applyTextStyle({ font: k }) }))); keepTextFocus(p.el); },
       }, h('span', {}, (FONTS[cur.font] || FONTS.sans)[0]), icon('chevronDown', 14))];
+  } else if (t === 'type') {
+    parts = flowBar(); // typing.js
   } else if (t === 'laser') {
     parts = [colorSlots(cfg), sep(), h('span', { class: 'opt-hint' }, 'Die Spur verschwindet automatisch')];
   } else if (t === 'screenshot') {
